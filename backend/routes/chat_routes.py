@@ -2,12 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from database import get_db
 from models import Conversation, Message, Project
 from auth import get_current_user
+from tools.executor import execute_tool
 from datetime import datetime, timezone
+from contextlib import asynccontextmanager
+from database import async_session as _async_session
 import httpx
 import json
 import re
@@ -16,17 +18,62 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 OLLAMA_BASE = "http://localhost:11434"
 
-TOOL_DEFINITIONS = [
+# Location: prefer browser GPS, fall back to IP geolocation
+_location_cache: dict = {}
+
+async def _update_location_from_gps(lat: float, lon: float):
+    """Reverse geocode GPS coordinates to city name."""
+    global _location_cache
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(
+                f"https://nominatim.openstreetmap.org/reverse",
+                params={"lat": lat, "lon": lon, "format": "json", "zoom": 10},
+                headers={"User-Agent": "ClaudeUI/1.0"},
+            )
+            data = resp.json()
+            addr = data.get("address", {})
+            city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("county", "Unknown")
+            state = addr.get("state", "")
+            _location_cache = {
+                "location": f"{city}, {state}" if state else city,
+                "timezone": "America/New_York",  # Could detect from coords but this covers most US
+                "lat": lat,
+                "lon": lon,
+                "source": "gps",
+            }
+    except Exception:
+        _location_cache = {"location": f"{lat},{lon}", "timezone": "America/New_York", "source": "gps"}
+
+
+async def _get_user_location() -> tuple[str, str]:
+    """Returns (location_string, timezone). Prefers GPS, falls back to home base."""
+    global _location_cache
+    if _location_cache:
+        return _location_cache["location"], _location_cache["timezone"]
+    # Default: Ridgway, PA (home base — IP geolocation is unreliable on Starlink)
+    _location_cache = {
+        "location": "Ridgway, PA",
+        "timezone": "America/New_York",
+        "lat": 41.4203,
+        "lon": -78.7286,
+        "source": "default",
+    }
+    return "Ridgway, PA", "America/New_York"
+
+# ── Tool Definitions (sent to Ollama) ───────────────────────────────────────
+
+TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "execute_code",
-            "description": "Execute Python code and return the output. Use this for calculations, data processing, or any code execution task.",
+            "description": "Execute code and return output. Use for calculations, data processing, scripts, or demonstrations.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "code": {"type": "string", "description": "Python code to execute"},
-                    "language": {"type": "string", "enum": ["python", "javascript", "bash"], "default": "python"},
+                    "code": {"type": "string", "description": "Code to execute"},
+                    "language": {"type": "string", "enum": ["python", "javascript", "bash"], "default": "python", "description": "Programming language"},
                 },
                 "required": ["code"],
             },
@@ -36,7 +83,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Search the web for information on a given query.",
+            "description": "Search the web for current information, news, facts, or anything you don't know.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -49,13 +96,147 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "create_artifact",
-            "description": "Create a rich artifact like a document, code file, SVG, HTML page, or React component for the user to view.",
+            "name": "fetch_url",
+            "description": "Fetch and read the content of a webpage URL.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "id": {"type": "string", "description": "Unique artifact identifier"},
-                    "type": {"type": "string", "enum": ["code", "document", "html", "svg", "react", "mermaid"], "description": "Artifact type"},
+                    "url": {"type": "string", "description": "URL to fetch"},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_datetime",
+            "description": "Get the current date and time.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "timezone": {"type": "string", "description": "Timezone name (optional)", "default": "local"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get current weather for a location.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "City name or location"},
+                },
+                "required": ["location"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calculator",
+            "description": "Evaluate a mathematical expression. Supports all Python math functions (sin, cos, sqrt, log, pi, e, etc).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "expression": {"type": "string", "description": "Math expression to evaluate, e.g. 'sqrt(144) + pi'"},
+                },
+                "required": ["expression"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "gmail_search",
+            "description": "Search Gmail emails. Use Gmail search syntax like 'from:user@example.com', 'subject:hello', 'is:unread', 'newer_than:2d'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Gmail search query"},
+                    "max_results": {"type": "integer", "description": "Max emails to return", "default": 10},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "gmail_read",
+            "description": "Read the full content of a specific email by its ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "Email message ID"},
+                },
+                "required": ["id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "gmail_send",
+            "description": "Send an email or reply to an existing email.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "to": {"type": "string", "description": "Recipient email address"},
+                    "subject": {"type": "string", "description": "Email subject"},
+                    "body": {"type": "string", "description": "Email body text"},
+                    "reply_to_id": {"type": "string", "description": "Message ID to reply to (optional)"},
+                },
+                "required": ["to", "subject", "body"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_list",
+            "description": "List upcoming Google Calendar events.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days_ahead": {"type": "integer", "description": "Number of days to look ahead", "default": 7},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_create",
+            "description": "Create a new Google Calendar event.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string", "description": "Event title"},
+                    "start_time": {"type": "string", "description": "Start time in ISO 8601 format (e.g. 2026-03-25T10:00:00)"},
+                    "end_time": {"type": "string", "description": "End time in ISO 8601 format"},
+                    "description": {"type": "string", "description": "Event description"},
+                    "location": {"type": "string", "description": "Event location"},
+                    "timezone": {"type": "string", "description": "Timezone", "default": "America/New_York"},
+                    "attendees": {"type": "array", "items": {"type": "string"}, "description": "List of attendee email addresses"},
+                },
+                "required": ["summary", "start_time", "end_time"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_artifact",
+            "description": "Create a rich artifact (code file, document, HTML page, SVG, diagram) displayed in a side panel for the user.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string", "description": "Unique artifact ID"},
+                    "type": {"type": "string", "enum": ["code", "document", "html", "svg", "react", "mermaid"]},
                     "title": {"type": "string", "description": "Artifact title"},
                     "content": {"type": "string", "description": "Artifact content"},
                     "language": {"type": "string", "description": "Programming language (for code type)"},
@@ -64,40 +245,36 @@ TOOL_DEFINITIONS = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_file",
-            "description": "Read the contents of an uploaded file.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "filename": {"type": "string", "description": "Name of the file to read"},
-                },
-                "required": ["filename"],
-            },
-        },
-    },
 ]
 
-SYSTEM_PROMPT = """You are Claude, a helpful AI assistant. You have access to several tools:
+SYSTEM_PROMPT_TEMPLATE = """You are a helpful AI assistant with access to powerful tools. Use them whenever they would help answer the user's question.
 
-1. **execute_code** - Run Python/JavaScript/Bash code. Use this for calculations, data analysis, or demonstrations.
-2. **web_search** - Search the web for current information.
-3. **create_artifact** - Create rich content (code files, documents, HTML pages, SVG graphics, React components, Mermaid diagrams) that will be displayed in a side panel.
-4. **read_file** - Read uploaded files.
+The user is located in {location} (timezone: {timezone}). When they ask about weather, time, or local info, use this location automatically — do not ask them where they are.
 
-When creating artifacts, use the create_artifact tool. Artifacts are for substantial, standalone content that the user might want to reference, copy, or iterate on. Use artifacts for:
-- Code files or scripts (type: "code", include language)
-- Documents or reports (type: "document")
-- HTML pages or interactive demos (type: "html")
-- SVG graphics (type: "svg")
-- React components (type: "react")
-- Mermaid diagrams (type: "mermaid")
+Available tools:
+- **execute_code**: Run Python, JavaScript, or Bash code
+- **web_search**: Search the web for current information
+- **fetch_url**: Read a webpage's content
+- **get_datetime**: Get current date and time
+- **get_weather**: Get weather for any location
+- **calculator**: Evaluate math expressions
+- **gmail_search**: Search the user's Gmail (supports Gmail search syntax)
+- **gmail_read**: Read a specific email by ID
+- **gmail_send**: Send or reply to emails
+- **calendar_list**: List upcoming Google Calendar events
+- **calendar_create**: Create calendar events
+- **create_artifact**: Create rich content (code, HTML, SVG, docs) shown in a side panel
 
-For short code snippets in explanations, use regular markdown code blocks instead.
+Guidelines:
+- Use tools proactively — don't just describe what you could do, actually do it
+- For math, use the calculator tool instead of computing in your head
+- For current events, dates, weather — use the appropriate tool
+- For code demonstrations, use execute_code to actually run it and show output
+- Create artifacts for substantial standalone content the user might want to keep
+- For short inline code examples, use regular markdown code blocks
+- Always format responses with clear markdown
 
-Always be helpful, thorough, and accurate. Format your responses with clear markdown."""
+Current date/time: {datetime_now}"""
 
 
 class SendMessageRequest(BaseModel):
@@ -114,73 +291,46 @@ class ConversationUpdate(BaseModel):
     project_id: str | None = None
 
 
+# ── Conversation CRUD ───────────────────────────────────────────────────────
+
 @router.get("/conversations")
-async def list_conversations(
-    user_id: str = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(Conversation)
-        .where(Conversation.user_id == user_id)
-        .order_by(desc(Conversation.updated_at))
-    )
-    convos = result.scalars().all()
-    return [_convo_dict(c) for c in convos]
+async def list_conversations(user_id: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Conversation).where(Conversation.user_id == user_id).order_by(desc(Conversation.updated_at)))
+    return [_convo_dict(c) for c in result.scalars().all()]
 
 
 @router.get("/conversations/{convo_id}")
-async def get_conversation(
-    convo_id: str,
-    user_id: str = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
+async def get_conversation(convo_id: str, user_id: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     convo = await _get_convo(convo_id, user_id, db)
-    result = await db.execute(
-        select(Message).where(Message.conversation_id == convo_id).order_by(Message.created_at)
-    )
-    messages = result.scalars().all()
+    result = await db.execute(select(Message).where(Message.conversation_id == convo_id).order_by(Message.created_at))
     d = _convo_dict(convo)
-    d["messages"] = [_msg_dict(m) for m in messages]
+    d["messages"] = [_msg_dict(m) for m in result.scalars().all()]
     return d
 
 
 @router.put("/conversations/{convo_id}")
-async def update_conversation(
-    convo_id: str,
-    req: ConversationUpdate,
-    user_id: str = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
+async def update_conversation(convo_id: str, req: ConversationUpdate, user_id: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     convo = await _get_convo(convo_id, user_id, db)
-    if req.title is not None:
-        convo.title = req.title
-    if req.is_starred is not None:
-        convo.is_starred = req.is_starred
-    if req.project_id is not None:
-        convo.project_id = req.project_id if req.project_id else None
+    if req.title is not None: convo.title = req.title
+    if req.is_starred is not None: convo.is_starred = req.is_starred
+    if req.project_id is not None: convo.project_id = req.project_id if req.project_id else None
     await db.commit()
     await db.refresh(convo)
     return _convo_dict(convo)
 
 
 @router.delete("/conversations/{convo_id}")
-async def delete_conversation(
-    convo_id: str,
-    user_id: str = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
+async def delete_conversation(convo_id: str, user_id: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     convo = await _get_convo(convo_id, user_id, db)
     await db.delete(convo)
     await db.commit()
     return {"ok": True}
 
 
+# ── Chat with Tool Loop ────────────────────────────────────────────────────
+
 @router.post("/send")
-async def send_message(
-    req: SendMessageRequest,
-    user_id: str = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
+async def send_message(req: SendMessageRequest, user_id: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     # Get or create conversation
     if req.conversation_id:
         convo = await _get_convo(req.conversation_id, user_id, db)
@@ -191,76 +341,144 @@ async def send_message(
         await db.refresh(convo)
 
     # Save user message
-    user_msg = Message(
-        conversation_id=convo.id,
-        role="user",
-        content=req.message,
-        attachments=req.attachments,
-    )
+    user_msg = Message(conversation_id=convo.id, role="user", content=req.message, attachments=req.attachments)
     db.add(user_msg)
     await db.commit()
 
     # Build message history
-    result = await db.execute(
-        select(Message).where(Message.conversation_id == convo.id).order_by(Message.created_at)
-    )
+    result = await db.execute(select(Message).where(Message.conversation_id == convo.id).order_by(Message.created_at))
     all_msgs = result.scalars().all()
 
-    # Build system prompt
-    system = SYSTEM_PROMPT
+    # System prompt
+    location, tz = await _get_user_location()
+    system = SYSTEM_PROMPT_TEMPLATE.format(
+        location=location,
+        timezone=tz,
+        datetime_now=datetime.now().strftime("%A, %B %d, %Y %I:%M %p"),
+    )
     if req.project_id:
         proj_result = await db.execute(select(Project).where(Project.id == req.project_id))
         project = proj_result.scalar_one_or_none()
         if project and project.system_prompt:
             system += f"\n\nProject instructions: {project.system_prompt}"
 
-    messages = [{"role": "system", "content": system}]
+    ollama_messages = [{"role": "system", "content": system}]
     for m in all_msgs:
-        msg_entry = {"role": m.role, "content": m.content}
-        messages.append(msg_entry)
+        msg_content = m.content
+        # If message has attachments, read file contents and append
+        if m.attachments:
+            for att in m.attachments:
+                file_text = _read_file_content(att.get("path", ""), att.get("filename", ""))
+                if file_text:
+                    msg_content += f"\n\n--- Attached file: {att.get('filename', 'file')} ---\n{file_text}\n--- End of file ---"
+        ollama_messages.append({"role": m.role, "content": msg_content})
 
     convo.updated_at = datetime.now(timezone.utc)
     await db.commit()
 
-    # Stream response from Ollama
     async def generate():
         full_response = ""
-        artifacts = []
-        tool_calls_data = []
+        all_artifacts = []
+        all_tool_calls = []
+        messages = list(ollama_messages)
+        max_tool_rounds = 8  # Safety limit
 
         try:
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                async with client.stream(
-                    "POST",
-                    f"{OLLAMA_BASE}/api/chat",
-                    json={
+            for round_num in range(max_tool_rounds + 1):
+                # Call Ollama
+                response_text = ""
+                tool_calls = []
+                eval_count = 0
+                eval_duration = 0
+
+                async with httpx.AsyncClient(timeout=300.0) as client:
+                    payload = {
                         "model": req.model,
                         "messages": messages,
                         "stream": True,
                         "options": {"num_ctx": 32768},
-                    },
-                ) as response:
-                    async for line in response.aiter_lines():
-                        if not line:
-                            continue
-                        try:
-                            data = json.loads(line)
-                            if "message" in data and "content" in data["message"]:
-                                chunk = data["message"]["content"]
-                                full_response += chunk
-                                yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
-                            if data.get("done"):
-                                eval_count = data.get("eval_count", 0)
-                                yield f"data: {json.dumps({'type': 'metrics', 'eval_count': eval_count, 'eval_duration': data.get('eval_duration', 0)})}\n\n"
-                        except json.JSONDecodeError:
-                            continue
+                        "tools": TOOLS,
+                    }
+                    async with client.stream("POST", f"{OLLAMA_BASE}/api/chat", json=payload) as response:
+                        async for line in response.aiter_lines():
+                            if not line:
+                                continue
+                            try:
+                                data = json.loads(line)
+
+                                # Stream text tokens to the client
+                                if "message" in data:
+                                    msg = data["message"]
+                                    if msg.get("content"):
+                                        chunk = msg["content"]
+                                        response_text += chunk
+                                        full_response += chunk
+                                        yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
+
+                                    # Collect tool calls
+                                    if msg.get("tool_calls"):
+                                        tool_calls.extend(msg["tool_calls"])
+
+                                if data.get("done"):
+                                    eval_count = data.get("eval_count", 0)
+                                    eval_duration = data.get("eval_duration", 0)
+
+                            except json.JSONDecodeError:
+                                continue
+
+                # Send metrics for this round
+                if eval_count:
+                    yield f"data: {json.dumps({'type': 'metrics', 'eval_count': eval_count, 'eval_duration': eval_duration})}\n\n"
+
+                # If no tool calls, we're done
+                if not tool_calls:
+                    break
+
+                # ── Execute tool calls ──────────────────────────────────
+                messages.append({"role": "assistant", "content": response_text, "tool_calls": tool_calls})
+
+                for tc in tool_calls:
+                    func = tc.get("function", {})
+                    tool_name = func.get("name", "")
+                    tool_args = func.get("arguments", {})
+                    all_tool_calls.append({"name": tool_name, "arguments": tool_args})
+
+                    # Notify frontend about tool execution
+                    yield f"data: {json.dumps({'type': 'tool_start', 'name': tool_name, 'arguments': tool_args})}\n\n"
+
+                    # Execute the tool
+                    tool_result = await execute_tool(tool_name, tool_args)
+
+                    # Handle artifacts from create_artifact tool
+                    if tool_name == "create_artifact" and tool_result.get("artifact_created"):
+                        artifact = {
+                            "id": tool_args.get("id", f"artifact-{len(all_artifacts)}"),
+                            "type": tool_args.get("type", "code"),
+                            "title": tool_args.get("title", "Untitled"),
+                            "content": tool_args.get("content", ""),
+                            "language": tool_args.get("language", ""),
+                        }
+                        all_artifacts.append(artifact)
+                        yield f"data: {json.dumps({'type': 'artifact', 'artifact': artifact})}\n\n"
+
+                    yield f"data: {json.dumps({'type': 'tool_result', 'name': tool_name, 'result': tool_result})}\n\n"
+
+                    # Add tool result to messages for next round
+                    messages.append({
+                        "role": "tool",
+                        "content": json.dumps(tool_result),
+                    })
+
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
-        # Parse artifacts from response
-        artifacts = _parse_artifacts(full_response)
-        if artifacts:
-            yield f"data: {json.dumps({'type': 'artifacts', 'artifacts': artifacts})}\n\n"
+        # Also parse any inline code blocks as artifacts
+        inline_artifacts = _parse_artifacts(full_response)
+        for a in inline_artifacts:
+            if not any(ea["content"] == a["content"] for ea in all_artifacts):
+                all_artifacts.append(a)
+        if inline_artifacts:
+            yield f"data: {json.dumps({'type': 'artifacts', 'artifacts': inline_artifacts})}\n\n"
 
         # Save assistant message
         async with get_db_session() as save_db:
@@ -269,11 +487,11 @@ async def send_message(
                 role="assistant",
                 content=full_response,
                 model=req.model,
-                artifacts=artifacts if artifacts else None,
+                artifacts=all_artifacts if all_artifacts else None,
+                tool_calls=all_tool_calls if all_tool_calls else None,
             )
             save_db.add(assistant_msg)
 
-            # Auto-title on first message
             if len(all_msgs) <= 1:
                 title = _generate_title(req.message)
                 stmt = select(Conversation).where(Conversation.id == convo.id)
@@ -298,36 +516,67 @@ async def list_models():
         return {"models": [], "error": str(e)}
 
 
+@router.get("/tools/status")
+async def tools_status():
+    """Check which tools are available and connected."""
+    from tools.google_auth import is_google_connected
+    return {
+        "core": ["execute_code", "web_search", "fetch_url", "get_datetime", "get_weather", "calculator", "create_artifact"],
+        "google_connected": is_google_connected(),
+        "google_tools": ["gmail_search", "gmail_read", "gmail_send", "calendar_list", "calendar_create"],
+    }
+
+
+# ── Helpers ─────────────────────────────────────────────────────────────────
+
+def _read_file_content(filepath: str, filename: str) -> str:
+    """Read file content, supporting PDF, text, code, and common formats."""
+    import os
+    if not filepath or not os.path.exists(filepath):
+        return ""
+    try:
+        ext = os.path.splitext(filename.lower())[1]
+        # PDF
+        if ext == ".pdf":
+            import fitz  # PyMuPDF
+            doc = fitz.open(filepath)
+            text = ""
+            for page in doc:
+                text += page.get_text()
+            doc.close()
+            # Truncate very long PDFs
+            if len(text) > 15000:
+                text = text[:15000] + "\n\n...(truncated, showing first ~15000 characters)"
+            return text
+        # Binary files we can't read
+        if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp3", ".mp4", ".zip", ".tar", ".gz"):
+            return f"[Binary file: {filename}, {os.path.getsize(filepath)} bytes]"
+        # Everything else: try as text
+        with open(filepath, "r", errors="replace") as f:
+            text = f.read()
+        if len(text) > 15000:
+            text = text[:15000] + "\n\n...(truncated)"
+        return text
+    except Exception as e:
+        return f"[Could not read file: {e}]"
+
+
 def _parse_artifacts(text: str) -> list[dict]:
-    """Extract artifact-like code blocks from the response."""
     artifacts = []
-    # Match code blocks with language tags
     pattern = r'```(\w+)\n(.*?)```'
-    matches = re.finditer(pattern, text, re.DOTALL)
-    for i, match in enumerate(matches):
+    for i, match in enumerate(re.finditer(pattern, text, re.DOTALL)):
         lang = match.group(1)
         content = match.group(2).strip()
-        # Only create artifacts for substantial code blocks (>5 lines)
         if content.count('\n') >= 5:
             artifact_type = "code"
-            if lang in ("html", "htm"):
-                artifact_type = "html"
-            elif lang == "svg":
-                artifact_type = "svg"
-            elif lang == "mermaid":
-                artifact_type = "mermaid"
-            artifacts.append({
-                "id": f"artifact-{i}",
-                "type": artifact_type,
-                "title": f"{lang.title()} code",
-                "content": content,
-                "language": lang,
-            })
+            if lang in ("html", "htm"): artifact_type = "html"
+            elif lang == "svg": artifact_type = "svg"
+            elif lang == "mermaid": artifact_type = "mermaid"
+            artifacts.append({"id": f"artifact-{i}", "type": artifact_type, "title": f"{lang.title()} code", "content": content, "language": lang})
     return artifacts
 
 
 def _generate_title(message: str) -> str:
-    """Generate a short title from the first user message."""
     title = message.strip()[:80]
     if len(message) > 80:
         title = title.rsplit(" ", 1)[0] + "..."
@@ -335,45 +584,19 @@ def _generate_title(message: str) -> str:
 
 
 async def _get_convo(convo_id: str, user_id: str, db: AsyncSession) -> Conversation:
-    result = await db.execute(
-        select(Conversation).where(Conversation.id == convo_id, Conversation.user_id == user_id)
-    )
+    result = await db.execute(select(Conversation).where(Conversation.id == convo_id, Conversation.user_id == user_id))
     convo = result.scalar_one_or_none()
-    if not convo:
-        raise HTTPException(404, "Conversation not found")
+    if not convo: raise HTTPException(404, "Conversation not found")
     return convo
 
 
 def _convo_dict(c: Conversation) -> dict:
-    return {
-        "id": c.id,
-        "title": c.title,
-        "model": c.model,
-        "project_id": c.project_id,
-        "is_starred": c.is_starred,
-        "created_at": c.created_at.isoformat() if c.created_at else None,
-        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
-    }
+    return {"id": c.id, "title": c.title, "model": c.model, "project_id": c.project_id, "is_starred": c.is_starred, "created_at": c.created_at.isoformat() if c.created_at else None, "updated_at": c.updated_at.isoformat() if c.updated_at else None}
 
 
 def _msg_dict(m: Message) -> dict:
-    return {
-        "id": m.id,
-        "role": m.role,
-        "content": m.content,
-        "model": m.model,
-        "artifacts": m.artifacts,
-        "attachments": m.attachments,
-        "tool_calls": m.tool_calls,
-        "tool_results": m.tool_results,
-        "token_count": m.token_count,
-        "created_at": m.created_at.isoformat() if m.created_at else None,
-    }
+    return {"id": m.id, "role": m.role, "content": m.content, "model": m.model, "artifacts": m.artifacts, "attachments": m.attachments, "tool_calls": m.tool_calls, "tool_results": m.tool_results, "token_count": m.token_count, "created_at": m.created_at.isoformat() if m.created_at else None}
 
-
-# Helper for saving from streaming context
-from database import async_session as _async_session
-from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def get_db_session():

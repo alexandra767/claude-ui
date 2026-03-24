@@ -25,7 +25,7 @@ app = FastAPI(title="Claude UI Backend", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://192.168.1.187:5173", "http://192.168.1.187:3000"],
+    allow_origins=["*"],  # Allow all origins — local app, safe behind Tailscale
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,6 +46,18 @@ app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.post("/api/location/update")
+async def update_location(data: dict):
+    """Receive GPS coordinates from the browser and reverse geocode."""
+    from routes.chat_routes import _update_location_from_gps, _location_cache
+    lat = data.get("lat")
+    lon = data.get("lon")
+    if lat is not None and lon is not None:
+        await _update_location_from_gps(lat, lon)
+        return {"status": "ok", "location": _location_cache.get("location", "")}
+    return {"status": "error", "message": "Missing lat/lon"}
 
 
 if __name__ == "__main__":

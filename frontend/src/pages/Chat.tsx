@@ -6,7 +6,7 @@ import Sidebar from '../components/Sidebar';
 import ChatInput from '../components/ChatInput';
 import MessageBubble from '../components/MessageBubble';
 import ArtifactPanel from '../components/ArtifactPanel';
-import { Menu, Sparkles, Zap } from 'lucide-react';
+import { Menu, Sparkles, Zap, Terminal, Search, Globe, Mail, Calendar, Calculator, Clock, FileCode } from 'lucide-react';
 import type { Message, Attachment } from '../types';
 
 interface StreamStats {
@@ -14,6 +14,27 @@ interface StreamStats {
   tokensPerSec: number;
   duration: number;
 }
+
+interface ActiveTool {
+  name: string;
+  status: 'running' | 'done';
+  result?: any;
+}
+
+const TOOL_META: Record<string, { label: string; icon: typeof Terminal }> = {
+  execute_code: { label: 'Running code', icon: Terminal },
+  web_search: { label: 'Searching the web', icon: Search },
+  fetch_url: { label: 'Reading webpage', icon: Globe },
+  gmail_search: { label: 'Searching emails', icon: Mail },
+  gmail_read: { label: 'Reading email', icon: Mail },
+  gmail_send: { label: 'Sending email', icon: Mail },
+  calendar_list: { label: 'Checking calendar', icon: Calendar },
+  calendar_create: { label: 'Creating event', icon: Calendar },
+  get_weather: { label: 'Getting weather', icon: Globe },
+  get_datetime: { label: 'Getting date/time', icon: Clock },
+  calculator: { label: 'Calculating', icon: Calculator },
+  create_artifact: { label: 'Creating artifact', icon: FileCode },
+};
 
 export default function Chat() {
   const { conversationId } = useParams();
@@ -23,6 +44,7 @@ export default function Chat() {
   const [streamStats, setStreamStats] = useState<StreamStats | null>(null);
   const [liveTokenCount, setLiveTokenCount] = useState(0);
   const [liveTps, setLiveTps] = useState(0);
+  const [activeTools, setActiveTools] = useState<ActiveTool[]>([]);
   const streamStartRef = useRef<number>(0);
   const tokenCountRef = useRef<number>(0);
 
@@ -70,6 +92,7 @@ export default function Chat() {
     setStreamStats(null);
     setLiveTokenCount(0);
     setLiveTps(0);
+    setActiveTools([]);
     streamStartRef.current = Date.now();
     tokenCountRef.current = 0;
 
@@ -112,11 +135,24 @@ export default function Chat() {
                 setLiveTps(elapsed > 0 ? tokenCountRef.current / elapsed : 0);
                 break;
               case 'metrics':
-                ollamaEvalCount = data.eval_count || 0;
-                ollamaEvalDuration = data.eval_duration || 0;
+                ollamaEvalCount += (data.eval_count || 0);
+                ollamaEvalDuration += (data.eval_duration || 0);
+                break;
+              case 'tool_start':
+                setActiveTools(prev => [...prev, { name: data.name, status: 'running' }]);
+                break;
+              case 'tool_result':
+                setActiveTools(prev => prev.map(t =>
+                  t.name === data.name && t.status === 'running'
+                    ? { ...t, status: 'done', result: data.result }
+                    : t
+                ));
+                break;
+              case 'artifact':
+                artifacts.push(data.artifact);
                 break;
               case 'artifacts':
-                artifacts = data.artifacts;
+                artifacts.push(...data.artifacts);
                 break;
               case 'done':
                 newConvoId = data.conversation_id;
@@ -195,7 +231,7 @@ export default function Chat() {
           {/* Messages area */}
           <div className="flex-1 overflow-y-auto">
             {isEmpty ? (
-              <EmptyState />
+              <EmptyState onSend={handleSend} />
             ) : (
               <div className="max-w-3xl mx-auto">
                 {messages.map((msg) => (
@@ -203,6 +239,29 @@ export default function Chat() {
                 ))}
                 {isStreaming && (
                   <>
+                    {/* Tool activity indicators */}
+                    {activeTools.length > 0 && (
+                      <div className="px-16 py-2 space-y-1.5">
+                        {activeTools.map((tool, i) => {
+                          const meta = TOOL_META[tool.name] || { label: tool.name, icon: Terminal };
+                          const Icon = meta.icon;
+                          return (
+                            <div key={i} className={`flex items-center gap-2 text-xs rounded-lg px-3 py-2 ${tool.status === 'running' ? 'bg-accent/5 text-accent' : 'bg-green-50 text-green-600'}`}>
+                              <Icon className="w-3.5 h-3.5" />
+                              <span className="font-medium">{meta.label}</span>
+                              {tool.status === 'running' && (
+                                <span className="flex gap-0.5 ml-1">
+                                  <span className="w-1 h-1 rounded-full bg-accent thinking-dot" />
+                                  <span className="w-1 h-1 rounded-full bg-accent thinking-dot" />
+                                  <span className="w-1 h-1 rounded-full bg-accent thinking-dot" />
+                                </span>
+                              )}
+                              {tool.status === 'done' && <span className="ml-1">Done</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                     <MessageBubble
                       message={{ id: 'streaming', role: 'assistant', content: '', created_at: '' }}
                       isStreaming
@@ -244,7 +303,13 @@ export default function Chat() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ onSend }: { onSend: (msg: string) => void }) {
+  const suggestions = [
+    'What\'s the weather like today?',
+    'Check my calendar for this week',
+    'Write a Python script',
+    'Search my recent emails',
+  ];
   return (
     <div className="h-full flex items-center justify-center">
       <div className="text-center max-w-md px-4">
@@ -253,17 +318,13 @@ function EmptyState() {
         </div>
         <h2 className="text-xl font-semibold text-text-primary mb-2">How can I help you today?</h2>
         <p className="text-text-secondary text-sm leading-relaxed">
-          I can help you write, analyze, code, and create. Ask me anything or try one of these:
+          I can search the web, run code, check your email and calendar, and more.
         </p>
         <div className="grid grid-cols-2 gap-2 mt-6">
-          {[
-            'Write a Python script',
-            'Explain a concept',
-            'Debug my code',
-            'Create a website',
-          ].map((s) => (
+          {suggestions.map((s) => (
             <button
               key={s}
+              onClick={() => onSend(s)}
               className="text-left px-4 py-3 rounded-xl border border-border text-sm text-text-secondary hover:bg-white hover:border-accent/30 hover:text-text-primary transition"
             >
               {s}

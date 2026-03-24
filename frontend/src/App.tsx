@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { useAuthStore } from './stores/authStore';
+import { useChatStore } from './stores/chatStore';
 import Login from './pages/Login';
 import Chat from './pages/Chat';
 import Settings from './pages/Settings';
@@ -15,9 +16,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const loadFromStorage = useAuthStore((s) => s.loadFromStorage);
+  const detectLocation = useChatStore((s) => s.detectLocation);
 
   useEffect(() => {
     loadFromStorage();
+    detectLocation();
   }, []);
 
   return (

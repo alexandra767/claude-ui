@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import type { Conversation, Message, Artifact } from '../types';
 
+interface UserLocation {
+  lat: number;
+  lon: number;
+  city?: string;
+}
+
 interface ChatState {
   conversations: Conversation[];
   activeConversationId: string | null;
@@ -10,6 +16,7 @@ interface ChatState {
   selectedModel: string;
   activeArtifact: Artifact | null;
   showArtifactPanel: boolean;
+  userLocation: UserLocation | null;
 
   setConversations: (convos: Conversation[]) => void;
   setActiveConversation: (id: string | null) => void;
@@ -23,6 +30,8 @@ interface ChatState {
   setShowArtifactPanel: (v: boolean) => void;
   removeConversation: (id: string) => void;
   updateConversation: (id: string, updates: Partial<Conversation>) => void;
+  setUserLocation: (loc: UserLocation) => void;
+  detectLocation: () => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -34,6 +43,7 @@ export const useChatStore = create<ChatState>((set) => ({
   selectedModel: 'qwen3.5:122b',
   activeArtifact: null,
   showArtifactPanel: false,
+  userLocation: null,
 
   setConversations: (conversations) => set({ conversations }),
   setActiveConversation: (id) => set({ activeConversationId: id }),
@@ -53,4 +63,35 @@ export const useChatStore = create<ChatState>((set) => ({
   updateConversation: (id, updates) => set((s) => ({
     conversations: s.conversations.map((c) => c.id === id ? { ...c, ...updates } : c),
   })),
+  setUserLocation: (userLocation) => set({ userLocation }),
+  detectLocation: () => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          set({
+            userLocation: {
+              lat: position.coords.latitude,
+              lon: position.coords.longitude,
+            },
+          });
+          // Send to backend for reverse geocoding
+          fetch(`/api/location/update`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${localStorage.getItem('token')}`,
+            },
+            body: JSON.stringify({
+              lat: position.coords.latitude,
+              lon: position.coords.longitude,
+            }),
+          }).catch(() => {});
+        },
+        () => {
+          // Geolocation denied — backend falls back to IP
+        },
+        { timeout: 5000, maximumAge: 600000 }
+      );
+    }
+  },
 }));
