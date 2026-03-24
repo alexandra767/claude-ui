@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuthStore } from './stores/authStore';
 import { useChatStore } from './stores/chatStore';
 import Login from './pages/Login';
@@ -18,11 +18,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   const loadFromStorage = useAuthStore((s) => s.loadFromStorage);
   const detectLocation = useChatStore((s) => s.detectLocation);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     loadFromStorage();
     detectLocation();
+    setReady(true);
   }, []);
+
+  // Don't render routes until auth state is loaded from localStorage
+  if (!ready) return null;
 
   return (
     <Routes>

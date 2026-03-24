@@ -411,6 +411,7 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
         full_response = ""
         all_artifacts = []
         all_tool_calls = []
+        all_images = []
         messages = list(ollama_messages)
         max_tool_rounds = 8  # Safety limit
 
@@ -499,7 +500,9 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
 
                     # If image was generated, send it to the frontend
                     if tool_name in ("generate_image", "edit_image") and tool_result.get("success") and tool_result.get("filename"):
-                        yield f"data: {json.dumps({'type': 'image', 'filename': tool_result['filename'], 'prompt': tool_result.get('prompt', '')})}\n\n"
+                        img_data = {"filename": tool_result["filename"], "prompt": tool_result.get("prompt", "")}
+                        all_images.append(img_data)
+                        yield f"data: {json.dumps({'type': 'image', **img_data})}\n\n"
 
                     yield f"data: {json.dumps({'type': 'tool_result', 'name': tool_name, 'result': tool_result})}\n\n"
 
@@ -529,6 +532,7 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
                 model=req.model,
                 artifacts=all_artifacts if all_artifacts else None,
                 tool_calls=all_tool_calls if all_tool_calls else None,
+                images=all_images if all_images else None,
             )
             save_db.add(assistant_msg)
 
@@ -635,7 +639,7 @@ def _convo_dict(c: Conversation) -> dict:
 
 
 def _msg_dict(m: Message) -> dict:
-    return {"id": m.id, "role": m.role, "content": m.content, "model": m.model, "artifacts": m.artifacts, "attachments": m.attachments, "tool_calls": m.tool_calls, "tool_results": m.tool_results, "token_count": m.token_count, "created_at": m.created_at.isoformat() if m.created_at else None}
+    return {"id": m.id, "role": m.role, "content": m.content, "model": m.model, "artifacts": m.artifacts, "attachments": m.attachments, "images": m.images, "tool_calls": m.tool_calls, "tool_results": m.tool_results, "token_count": m.token_count, "created_at": m.created_at.isoformat() if m.created_at else None}
 
 
 @asynccontextmanager

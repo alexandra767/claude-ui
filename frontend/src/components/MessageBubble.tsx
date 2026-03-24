@@ -3,7 +3,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import vscDarkPlus from 'react-syntax-highlighter/dist/esm/styles/prism/vsc-dark-plus';
 import { useChatStore } from '../stores/chatStore';
-import { Copy, Check, User, Sparkles, ChevronRight, Download } from 'lucide-react';
+import { Copy, Check, User, Sparkles, ChevronRight, Download, Maximize2 } from 'lucide-react';
 import { useState } from 'react';
 import type { Message, Artifact } from '../types';
 
@@ -14,7 +14,11 @@ interface Props {
 }
 
 export default function MessageBubble({ message, isStreaming, streamContent }: Props) {
-  const content = isStreaming ? streamContent || '' : message.content;
+  const rawContent = isStreaming ? streamContent || '' : message.content;
+  // Strip markdown images that point to generated_imgs (they display via the image card instead)
+  const content = message.images?.length
+    ? rawContent.replace(/!\[.*?\]\([^)]*generated_imgs[^)]*\)\n?/g, '').trim()
+    : rawContent;
   const isUser = message.role === 'user';
   const setActiveArtifact = useChatStore((s) => s.setActiveArtifact);
 
@@ -60,21 +64,9 @@ export default function MessageBubble({ message, isStreaming, streamContent }: P
                   return <code className={className} {...props}>{children}</code>;
                 },
                 img({ src, alt, ...props }) {
-                  // Rewrite local file paths to served URLs
-                  let fixedSrc = src || '';
-                  if (fixedSrc.includes('/generated_imgs/')) {
-                    const filename = fixedSrc.split('/').pop();
-                    fixedSrc = `/generated/${filename}`;
-                  }
-                  return (
-                    <img
-                      src={fixedSrc}
-                      alt={alt}
-                      className="max-w-full max-h-[500px] rounded-xl border border-border my-2"
-                      loading="lazy"
-                      {...props}
-                    />
-                  );
+                  // Hide generated images from markdown — they show in the image card below
+                  if ((src || '').includes('generated_imgs')) return null;
+                  return <img src={src} alt={alt} className="max-w-full rounded-xl border border-border my-2" loading="lazy" {...props} />;
                 },
               }}
             >
@@ -87,35 +79,40 @@ export default function MessageBubble({ message, isStreaming, streamContent }: P
         {message.images && message.images.length > 0 && (
           <div className="mt-3 space-y-3">
             {message.images.filter((img, i, arr) => arr.findIndex(x => x.filename === img.filename) === i).map((img, i) => (
-              <div key={i} className="rounded-xl overflow-hidden border border-border bg-white">
-                <img
-                  src={`/generated/${img.filename}`}
-                  alt={img.prompt}
-                  className="max-w-full max-h-[500px] object-contain"
-                  loading="lazy"
-                />
-                <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-cream/50">
-                  <span className="text-xs text-text-secondary truncate max-w-[60%]">{img.prompt}</span>
+              <div key={i} className="my-3 rounded-xl overflow-hidden border border-border/50">
+                {/* Top bar — icons only, same style as code blocks */}
+                <div className="flex items-center justify-end px-3 py-1.5 bg-[#2d2d2d] text-[#999] text-xs">
                   <div className="flex items-center gap-1">
                     <a
                       href={`/generated/${img.filename}`}
                       download={img.filename}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-cream transition"
+                      className="p-1 rounded hover:text-white transition"
+                      title="Download"
                     >
-                      <Download className="w-3 h-3" /> Save
+                      <Download className="w-3.5 h-3.5" />
                     </a>
-                    <button
-                      onClick={() => {
-                        fetch(`/generated/${img.filename}`)
-                          .then(r => r.blob())
-                          .then(blob => navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]))
-                          .catch(() => {});
-                      }}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-cream transition"
+                    <CopyImageButton src={`/generated/${img.filename}`} />
+                    <a
+                      href={`/generated/${img.filename}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 rounded hover:text-white transition"
+                      title="View full size"
                     >
-                      <Copy className="w-3 h-3" /> Copy
-                    </button>
+                      <Maximize2 className="w-3.5 h-3.5" />
+                    </a>
                   </div>
+                </div>
+                {/* Image */}
+                <img
+                  src={`/generated/${img.filename}`}
+                  alt={img.prompt}
+                  className="max-w-full max-h-[500px] object-contain block bg-white"
+                  loading="lazy"
+                />
+                {/* Description at bottom */}
+                <div className="px-3 py-2 bg-cream/50 border-t border-border">
+                  <span className="text-xs text-text-secondary">{img.prompt}</span>
                 </div>
               </div>
             ))}
@@ -145,6 +142,64 @@ export default function MessageBubble({ message, isStreaming, streamContent }: P
         )}
       </div>
     </div>
+  );
+}
+
+function CopyImageButton({ src }: { src: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      // Fetch the image
+      const response = await fetch(src);
+      const blob = await response.blob();
+
+      // Try clipboard API first (works on HTTPS)
+      if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+        // Need to convert to PNG for clipboard
+        const imgEl = document.createElement('img');
+        const objectUrl = URL.createObjectURL(blob);
+
+        const pngBlob = await new Promise<Blob>((resolve, reject) => {
+          imgEl.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = imgEl.naturalWidth;
+            canvas.height = imgEl.naturalHeight;
+            canvas.getContext('2d')!.drawImage(imgEl, 0, 0);
+            canvas.toBlob((b) => b ? resolve(b) : reject('toBlob failed'), 'image/png');
+            URL.revokeObjectURL(objectUrl);
+          };
+          imgEl.onerror = reject;
+          imgEl.src = objectUrl;
+        });
+
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+        return;
+      }
+    } catch {}
+
+    // Fallback for HTTP: copy the full image URL so user can paste in browser
+    try {
+      const fullUrl = window.location.origin + src;
+      await navigator.clipboard.writeText(fullUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Last resort: prompt with URL
+      window.prompt('Copy this image URL:', window.location.origin + src);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="p-2 rounded-md text-text-secondary hover:text-text-primary hover:bg-cream transition"
+      title="Copy image"
+    >
+      {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+    </button>
   );
 }
 

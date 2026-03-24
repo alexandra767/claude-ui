@@ -49,6 +49,7 @@ class Message(Base):
     tool_results = Column(JSON, nullable=True)
     artifacts = Column(JSON, nullable=True)  # [{id, type, title, content}]
     attachments = Column(JSON, nullable=True)  # [{filename, path, type, size}]
+    images = Column(JSON, nullable=True)  # [{filename, prompt}]
     token_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     conversation = relationship("Conversation", back_populates="messages")

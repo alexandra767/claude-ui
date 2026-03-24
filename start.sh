@@ -11,6 +11,8 @@ fi
 # Start backend
 echo "[*] Starting backend on port 3001..."
 cd ~/claude-ui/backend
+# Load env file
+set -a; [ -f .env ] && source .env; set +a
 nohup python3 main.py > /tmp/claude-ui-backend.log 2>&1 &
 echo $! > /tmp/claude-ui-backend.pid
 echo "    Backend PID: $(cat /tmp/claude-ui-backend.pid)"

@@ -18,9 +18,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers: { ...getHeaders(), ...options?.headers },
   });
   if (res.status === 401) {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
+    // Only redirect if we're not already on the login page
+    if (!window.location.pathname.startsWith('/login')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
     throw new Error('Unauthorized');
   }
   if (!res.ok) {

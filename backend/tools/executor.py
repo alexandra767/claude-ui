@@ -447,50 +447,39 @@ def _call_mcp_tool(name: str, arguments: dict) -> dict:
 
 
 async def _generate_image(args: dict) -> dict:
-    """Generate an image using Gemini API directly (same as Jarvis)."""
+    """Generate an image using Imagen 4.0 Ultra (Google's best image model)."""
     from google import genai
-    import base64 as b64
     import uuid as _uuid
 
     prompt = args.get("prompt", "")
-    api_key = os.environ.get("GEMINI_API_KEY", "AIzaSyDjIbgbtNzkHw3wHNN1FUlSJFhKaNn5fjU")
+    api_key = os.environ.get("GEMINI_API_KEY", "")
 
     try:
         client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-image",
-            contents=prompt,
+        response = client.models.generate_images(
+            model="imagen-4.0-ultra-generate-001",
+            prompt=prompt,
         )
 
-        # Extract image from response
-        if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.mime_type and part.inline_data.mime_type.startswith("image/"):
-                    output_dir = os.path.expanduser("~/generated_imgs")
-                    os.makedirs(output_dir, exist_ok=True)
-                    filename = f"{_uuid.uuid4().hex[:12]}.png"
-                    output_path = os.path.join(output_dir, filename)
+        if response.generated_images:
+            output_dir = os.path.expanduser("~/generated_imgs")
+            os.makedirs(output_dir, exist_ok=True)
+            filename = f"{_uuid.uuid4().hex[:12]}.png"
+            output_path = os.path.join(output_dir, filename)
 
-                    img_bytes = part.inline_data.data
-                    if isinstance(img_bytes, str):
-                        img_bytes = b64.b64decode(img_bytes)
-                    with open(output_path, "wb") as f:
-                        f.write(img_bytes)
+            img_bytes = response.generated_images[0].image.image_bytes
+            with open(output_path, "wb") as f:
+                f.write(img_bytes)
 
-                    return {
-                        "success": True,
-                        "file_path": output_path,
-                        "filename": filename,
-                        "prompt": prompt,
-                        "message": f"Image generated and saved to {output_path}",
-                    }
+            return {
+                "success": True,
+                "file_path": output_path,
+                "filename": filename,
+                "prompt": prompt,
+                "message": f"Image generated and saved to {output_path}",
+            }
 
-        # Check if there's text content (sometimes Gemini returns text instead)
-        text_parts = [p.text for p in response.candidates[0].content.parts if hasattr(p, 'text') and p.text]
-        if text_parts:
-            return {"success": False, "error": "Gemini returned text instead of image", "text": " ".join(text_parts)}
-
-        return {"success": False, "error": "No image found in Gemini response"}
+        return {"success": False, "error": "No image generated"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -504,7 +493,7 @@ async def _edit_image(args: dict) -> dict:
 
     image_path = args.get("image_path", "")
     prompt = args.get("prompt", "")
-    api_key = os.environ.get("GEMINI_API_KEY", "AIzaSyDjIbgbtNzkHw3wHNN1FUlSJFhKaNn5fjU")
+    api_key = os.environ.get("GEMINI_API_KEY", "")
 
     if not os.path.exists(image_path):
         return {"success": False, "error": f"Image not found: {image_path}"}
