@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import vscDarkPlus from 'react-syntax-highlighter/dist/esm/styles/prism/vsc-dark-plus';
 import { useChatStore } from '../stores/chatStore';
+import { useAuthStore } from '../stores/authStore';
 import { Copy, Check, User, Sparkles, ChevronRight, Download, Maximize2 } from 'lucide-react';
 import { useState } from 'react';
 import type { Message, Artifact } from '../types';
@@ -21,13 +22,18 @@ export default function MessageBubble({ message, isStreaming, streamContent }: P
     : rawContent;
   const isUser = message.role === 'user';
   const setActiveArtifact = useChatStore((s) => s.setActiveArtifact);
+  const avatarUrl = useAuthStore((s) => s.user?.avatar_url);
 
   return (
     <div className={`flex gap-4 py-6 px-4 ${isUser ? '' : ''}`}>
       {/* Avatar */}
-      <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isUser ? 'bg-accent/15 text-accent' : 'bg-gradient-to-br from-accent/20 to-orange-200 text-accent'}`}>
-        {isUser ? <User className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
-      </div>
+      {isUser && avatarUrl ? (
+        <img src={avatarUrl} alt="" className="shrink-0 w-8 h-8 rounded-full object-cover" />
+      ) : (
+        <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${isUser ? 'bg-accent/15 text-accent' : 'bg-gradient-to-br from-accent/20 to-orange-200 text-accent'}`}>
+          {isUser ? <User className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 min-w-0">

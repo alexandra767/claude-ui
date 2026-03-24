@@ -8,6 +8,7 @@ import Settings from './pages/Settings';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/ProjectDetail';
 import Share from './pages/Share';
+import { useTheme } from './hooks/useTheme';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -19,6 +20,7 @@ export default function App() {
   const loadFromStorage = useAuthStore((s) => s.loadFromStorage);
   const detectLocation = useChatStore((s) => s.detectLocation);
   const [ready, setReady] = useState(false);
+  useTheme();
 
   useEffect(() => {
     loadFromStorage();

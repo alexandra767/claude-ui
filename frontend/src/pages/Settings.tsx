@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import { auth } from '../api/client';
+import { applyTheme } from '../hooks/useTheme';
 import {
   ArrowLeft, User, Palette, Shield, Database, Bell,
   Monitor, Sun, Moon, Save, Check, Trash2
@@ -89,12 +90,38 @@ export default function Settings() {
               </div>
 
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-accent/15 flex items-center justify-center text-accent text-2xl font-medium">
-                  {displayName?.[0]?.toUpperCase() || 'U'}
-                </div>
+                <label className="relative cursor-pointer group">
+                  {user?.avatar_url ? (
+                    <img src={user.avatar_url} alt="Avatar" className="w-16 h-16 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-accent/15 flex items-center justify-center text-accent text-2xl font-medium">
+                      {displayName?.[0]?.toUpperCase() || 'U'}
+                    </div>
+                  )}
+                  <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                    <span className="text-white text-xs font-medium">Change</span>
+                  </div>
+                  <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    const token = localStorage.getItem('token');
+                    const res = await fetch('/api/auth/avatar', {
+                      method: 'POST',
+                      headers: token ? { Authorization: `Bearer ${token}` } : {},
+                      body: formData,
+                    });
+                    if (res.ok) {
+                      const data = await res.json();
+                      updateUser({ avatar_url: data.avatar_url });
+                    }
+                  }} />
+                </label>
                 <div>
                   <div className="text-text-primary font-medium">{user?.username}</div>
                   <div className="text-sm text-text-secondary">{user?.email}</div>
+                  <div className="text-xs text-text-secondary mt-0.5">Click photo to change</div>
                 </div>
               </div>
 
@@ -133,7 +160,7 @@ export default function Settings() {
                   ].map(({ id, label, icon: Icon }) => (
                     <button
                       key={id}
-                      onClick={() => setTheme(id)}
+                      onClick={() => { setTheme(id); applyTheme(id); }}
                       className={`flex items-center gap-2 px-4 py-3 rounded-xl border transition ${
                         theme === id ? 'border-accent bg-accent/5 text-accent' : 'border-border text-text-secondary hover:border-accent/30'
                       }`}
