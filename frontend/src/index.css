@@ -101,3 +101,20 @@ html.dark .markdown-content tr:nth-child(even) { background: rgba(255,255,255,0.
 .thinking-dot:nth-child(1) { animation: pulse-dot 1.4s infinite 0s; }
 .thinking-dot:nth-child(2) { animation: pulse-dot 1.4s infinite 0.2s; }
 .thinking-dot:nth-child(3) { animation: pulse-dot 1.4s infinite 0.4s; }
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  /* Safe area for notch/home indicator */
+  body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+  /* Bigger tap targets */
+  button, a { min-height: 44px; min-width: 44px; }
+  button:not(.inline-btn), a:not(.inline-link) { display: inline-flex; align-items: center; justify-content: center; }
+
+  /* Prevent zoom on input focus (iOS) */
+  input, textarea, select { font-size: 16px !important; }
+
+  /* Better message padding */
+  .markdown-content pre { font-size: 0.8rem; }
+  .markdown-content { font-size: 0.95rem; }
+}

@@ -27,7 +27,7 @@ export default function MessageBubble({ message, isStreaming, streamContent, onE
   const avatarUrl = useAuthStore((s) => s.user?.avatar_url);
 
   return (
-    <div className="group flex gap-4 py-6 px-4">
+    <div className="group flex gap-3 sm:gap-4 py-4 sm:py-6 px-3 sm:px-4">
       {/* Avatar */}
       {isUser && avatarUrl ? (
         <img src={avatarUrl} alt="" className="shrink-0 w-8 h-8 rounded-full object-cover" />

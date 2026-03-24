@@ -69,7 +69,7 @@ export default function ChatInput({ onSend, disabled }: Props) {
   const canSend = (text.trim() || attachments.length > 0) && !disabled && !isStreaming;
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-4 pb-4">
+    <div className="w-full max-w-3xl mx-auto px-2 sm:px-4 pb-2 sm:pb-4">
       <div className="bg-white rounded-2xl border border-border shadow-sm">
         {/* Attachments */}
         {attachments.length > 0 && (
@@ -113,7 +113,7 @@ export default function ChatInput({ onSend, disabled }: Props) {
             onKeyDown={handleKeyDown}
             placeholder="Message..."
             rows={1}
-            className="flex-1 resize-none bg-transparent text-text-primary placeholder:text-text-secondary/60 focus:outline-none text-[15px] leading-6 py-1.5 max-h-[200px]"
+            className="flex-1 resize-none bg-transparent text-text-primary placeholder:text-text-secondary/60 focus:outline-none text-[16px] leading-6 py-2 max-h-[200px]"
           />
 
           <button

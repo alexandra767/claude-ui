@@ -82,6 +82,22 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent]);
 
+  // Swipe to open sidebar on mobile
+  useEffect(() => {
+    let startX = 0;
+    let startY = 0;
+    const onStart = (e: TouchEvent) => { startX = e.touches[0].clientX; startY = e.touches[0].clientY; };
+    const onEnd = (e: TouchEvent) => {
+      const dx = e.changedTouches[0].clientX - startX;
+      const dy = Math.abs(e.changedTouches[0].clientY - startY);
+      if (dx > 80 && dy < 50 && startX < 30) setSidebarOpen(true);  // Swipe right from left edge
+      if (dx < -80 && dy < 50) setSidebarOpen(false);  // Swipe left to close
+    };
+    window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchend', onEnd, { passive: true });
+    return () => { window.removeEventListener('touchstart', onStart); window.removeEventListener('touchend', onEnd); };
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -293,17 +309,17 @@ export default function Chat() {
   const isEmpty = messages.length === 0 && !isStreaming;
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-[100dvh] overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <div className="flex-1 flex overflow-hidden">
         {/* Main chat area */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Top bar */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-white/50 backdrop-blur-sm">
+          <div className="flex items-center gap-3 px-3 sm:px-4 py-2 sm:py-3 border-b border-border bg-white/50 backdrop-blur-sm">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-cream transition"
+              className="lg:hidden p-2.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-cream transition"
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -330,7 +346,7 @@ export default function Chat() {
                     )}
                     {/* Tool activity indicators */}
                     {activeTools.length > 0 && (
-                      <div className="px-16 py-2 space-y-1.5">
+                      <div className="px-6 sm:px-16 py-2 space-y-1.5">
                         {activeTools.map((tool, i) => {
                           const meta = TOOL_META[tool.name] || { label: tool.name, icon: Terminal };
                           const Icon = meta.icon;
@@ -357,7 +373,7 @@ export default function Chat() {
                       streamContent={streamingContent}
                     />
                     {liveTokenCount > 0 && (
-                      <div className="flex items-center gap-2 px-16 pb-2 text-xs text-text-secondary">
+                      <div className="flex items-center gap-2 px-6 sm:px-16 pb-2 text-xs text-text-secondary">
                         <Zap className="w-3 h-3 text-accent" />
                         <span>{liveTps.toFixed(1)} tokens/s</span>
                         <span className="text-text-secondary/40">|</span>
@@ -367,7 +383,7 @@ export default function Chat() {
                   </>
                 )}
                 {!isStreaming && streamStats && messages.length > 0 && messages[messages.length - 1].role === 'assistant' && (
-                  <div className="flex items-center gap-2 px-16 pb-2 text-xs text-text-secondary">
+                  <div className="flex items-center gap-2 px-6 sm:px-16 pb-2 text-xs text-text-secondary">
                     <Zap className="w-3 h-3 text-green-500" />
                     <span className="font-medium">{streamStats.tokensPerSec.toFixed(1)} tokens/s</span>
                     <span className="text-text-secondary/40">|</span>
@@ -421,7 +437,7 @@ function EmptyState({ onSend }: { onSend: (msg: string) => void }) {
         <p className="text-text-secondary text-sm leading-relaxed">
           I can search the web, run code, check your email and calendar, and more.
         </p>
-        <div className="grid grid-cols-2 gap-2 mt-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-6">
           {suggestions.map((s) => (
             <button
               key={s}
@@ -441,7 +457,7 @@ function ThinkingBlock({ content, isLive }: { content: string; isLive?: boolean 
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="px-16 py-2">
+    <div className="px-6 sm:px-16 py-2">
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition"
