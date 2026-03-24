@@ -1,0 +1,276 @@
+import { useEffect, useRef, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useChatStore } from '../stores/chatStore';
+import { chat as chatApi } from '../api/client';
+import Sidebar from '../components/Sidebar';
+import ChatInput from '../components/ChatInput';
+import MessageBubble from '../components/MessageBubble';
+import ArtifactPanel from '../components/ArtifactPanel';
+import { Menu, Sparkles, Zap } from 'lucide-react';
+import type { Message, Attachment } from '../types';
+
+interface StreamStats {
+  tokens: number;
+  tokensPerSec: number;
+  duration: number;
+}
+
+export default function Chat() {
+  const { conversationId } = useParams();
+  const navigate = useNavigate();
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [streamStats, setStreamStats] = useState<StreamStats | null>(null);
+  const [liveTokenCount, setLiveTokenCount] = useState(0);
+  const [liveTps, setLiveTps] = useState(0);
+  const streamStartRef = useRef<number>(0);
+  const tokenCountRef = useRef<number>(0);
+
+  const {
+    activeConversationId, setActiveConversation, messages, setMessages,
+    addMessage, isStreaming, setStreaming, streamingContent,
+    appendStreamContent, resetStreamContent, selectedModel,
+    showArtifactPanel, setConversations,
+  } = useChatStore();
+
+  // Load conversation if URL has ID
+  useEffect(() => {
+    if (conversationId && conversationId !== activeConversationId) {
+      setActiveConversation(conversationId);
+      chatApi.getConversation(conversationId).then((data) => {
+        setMessages(data.messages || []);
+      }).catch(() => {
+        navigate('/chat');
+      });
+    } else if (!conversationId) {
+      setActiveConversation(null);
+      setMessages([]);
+    }
+  }, [conversationId]);
+
+  // Auto-scroll
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamingContent]);
+
+  const handleSend = async (text: string, attachments?: Attachment[]) => {
+    // Add user message optimistically
+    const userMsg: Message = {
+      id: 'temp-' + Date.now(),
+      role: 'user',
+      content: text,
+      attachments,
+      created_at: new Date().toISOString(),
+    };
+    addMessage(userMsg);
+
+    // Start streaming
+    setStreaming(true);
+    resetStreamContent();
+    setStreamStats(null);
+    setLiveTokenCount(0);
+    setLiveTps(0);
+    streamStartRef.current = Date.now();
+    tokenCountRef.current = 0;
+
+    try {
+      const response = await chatApi.sendMessage({
+        conversation_id: activeConversationId || undefined,
+        message: text,
+        model: selectedModel,
+        attachments,
+      });
+
+      if (!response.body) throw new Error('No response body');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
+      let newConvoId = activeConversationId;
+      let artifacts: any[] = [];
+      let ollamaEvalCount = 0;
+      let ollamaEvalDuration = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            switch (data.type) {
+              case 'token':
+                fullContent += data.content;
+                appendStreamContent(data.content);
+                tokenCountRef.current++;
+                const elapsed = (Date.now() - streamStartRef.current) / 1000;
+                setLiveTokenCount(tokenCountRef.current);
+                setLiveTps(elapsed > 0 ? tokenCountRef.current / elapsed : 0);
+                break;
+              case 'metrics':
+                ollamaEvalCount = data.eval_count || 0;
+                ollamaEvalDuration = data.eval_duration || 0;
+                break;
+              case 'artifacts':
+                artifacts = data.artifacts;
+                break;
+              case 'done':
+                newConvoId = data.conversation_id;
+                break;
+              case 'error':
+                fullContent += `\n\n**Error:** ${data.content}`;
+                appendStreamContent(`\n\n**Error:** ${data.content}`);
+                break;
+            }
+          } catch {}
+        }
+      }
+
+      // Calculate final stats — prefer Ollama's precise numbers
+      const totalDuration = (Date.now() - streamStartRef.current) / 1000;
+      const finalTokens = ollamaEvalCount || tokenCountRef.current;
+      const finalTps = ollamaEvalDuration > 0
+        ? ollamaEvalCount / (ollamaEvalDuration / 1e9)
+        : (totalDuration > 0 ? finalTokens / totalDuration : 0);
+      setStreamStats({ tokens: finalTokens, tokensPerSec: finalTps, duration: totalDuration });
+
+      // Add assistant message
+      const assistantMsg: Message = {
+        id: 'msg-' + Date.now(),
+        role: 'assistant',
+        content: fullContent,
+        model: selectedModel,
+        artifacts: artifacts.length > 0 ? artifacts : undefined,
+        created_at: new Date().toISOString(),
+      };
+      addMessage(assistantMsg);
+
+      // Navigate to new conversation if created
+      if (newConvoId && newConvoId !== activeConversationId) {
+        setActiveConversation(newConvoId);
+        navigate(`/chat/${newConvoId}`, { replace: true });
+        // Refresh sidebar
+        chatApi.listConversations().then(setConversations).catch(() => {});
+      }
+    } catch (err: any) {
+      addMessage({
+        id: 'err-' + Date.now(),
+        role: 'assistant',
+        content: `Something went wrong: ${err.message}. Make sure the model is running in Ollama.`,
+        created_at: new Date().toISOString(),
+      });
+    } finally {
+      setStreaming(false);
+      resetStreamContent();
+    }
+  };
+
+  const isEmpty = messages.length === 0 && !isStreaming;
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* Main chat area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Top bar */}
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-white/50 backdrop-blur-sm">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden p-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-cream transition"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="flex items-center gap-2 text-sm text-text-secondary">
+              <Sparkles className="w-4 h-4 text-accent" />
+              <span className="font-medium text-text-primary">{selectedModel}</span>
+            </div>
+          </div>
+
+          {/* Messages area */}
+          <div className="flex-1 overflow-y-auto">
+            {isEmpty ? (
+              <EmptyState />
+            ) : (
+              <div className="max-w-3xl mx-auto">
+                {messages.map((msg) => (
+                  <MessageBubble key={msg.id} message={msg} />
+                ))}
+                {isStreaming && (
+                  <>
+                    <MessageBubble
+                      message={{ id: 'streaming', role: 'assistant', content: '', created_at: '' }}
+                      isStreaming
+                      streamContent={streamingContent}
+                    />
+                    {liveTokenCount > 0 && (
+                      <div className="flex items-center gap-2 px-16 pb-2 text-xs text-text-secondary">
+                        <Zap className="w-3 h-3 text-accent" />
+                        <span>{liveTps.toFixed(1)} tokens/s</span>
+                        <span className="text-text-secondary/40">|</span>
+                        <span>{liveTokenCount} tokens</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                {!isStreaming && streamStats && messages.length > 0 && messages[messages.length - 1].role === 'assistant' && (
+                  <div className="flex items-center gap-2 px-16 pb-2 text-xs text-text-secondary">
+                    <Zap className="w-3 h-3 text-green-500" />
+                    <span className="font-medium">{streamStats.tokensPerSec.toFixed(1)} tokens/s</span>
+                    <span className="text-text-secondary/40">|</span>
+                    <span>{streamStats.tokens.toLocaleString()} tokens</span>
+                    <span className="text-text-secondary/40">|</span>
+                    <span>{streamStats.duration.toFixed(1)}s</span>
+                  </div>
+                )}
+                <div ref={messagesEndRef} className="h-4" />
+              </div>
+            )}
+          </div>
+
+          {/* Input */}
+          <ChatInput onSend={handleSend} />
+        </div>
+
+        {/* Artifact panel */}
+        {showArtifactPanel && <ArtifactPanel />}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="h-full flex items-center justify-center">
+      <div className="text-center max-w-md px-4">
+        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-accent/15 to-orange-100 mb-6">
+          <Sparkles className="w-8 h-8 text-accent" />
+        </div>
+        <h2 className="text-xl font-semibold text-text-primary mb-2">How can I help you today?</h2>
+        <p className="text-text-secondary text-sm leading-relaxed">
+          I can help you write, analyze, code, and create. Ask me anything or try one of these:
+        </p>
+        <div className="grid grid-cols-2 gap-2 mt-6">
+          {[
+            'Write a Python script',
+            'Explain a concept',
+            'Debug my code',
+            'Create a website',
+          ].map((s) => (
+            <button
+              key={s}
+              className="text-left px-4 py-3 rounded-xl border border-border text-sm text-text-secondary hover:bg-white hover:border-accent/30 hover:text-text-primary transition"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cream: #FAF9F6;
+  --color-cream-dark: #F0EDE6;
+  --color-sidebar-bg: #2C2B28;
+  --color-sidebar-hover: #3A3935;
+  --color-sidebar-active: #454440;
+  --color-chat-bg: #FAF9F6;
+  --color-user-msg: #EDE9E1;
+  --color-accent: #DA7756;
+  --color-accent-hover: #C4684A;
+  --color-text-primary: #2D2D2A;
+  --color-text-secondary: #6B6B68;
+  --color-text-sidebar: #CECCC6;
+  --color-text-sidebar-dim: #8A8985;
+  --color-border: #E5E2DB;
+  --color-border-dark: #3A3935;
+  --color-input-bg: #FFFFFF;
+  --color-code-bg: #1E1E1E;
+  --font-sans: 'Söhne', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Söhne Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-cream);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.15); border-radius: 3px; }
+.sidebar-scroll::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.1); }
+
+.markdown-content h1 { font-size: 1.5rem; font-weight: 600; margin: 1rem 0 0.5rem; }
+.markdown-content h2 { font-size: 1.25rem; font-weight: 600; margin: 1rem 0 0.5rem; }
+.markdown-content h3 { font-size: 1.1rem; font-weight: 600; margin: 0.75rem 0 0.5rem; }
+.markdown-content p { margin: 0.5rem 0; line-height: 1.7; }
+.markdown-content ul, .markdown-content ol { margin: 0.5rem 0; padding-left: 1.5rem; }
+.markdown-content li { margin: 0.25rem 0; line-height: 1.6; }
+.markdown-content ul { list-style-type: disc; }
+.markdown-content ol { list-style-type: decimal; }
+.markdown-content code:not(pre code) {
+  background: #f0ede6; padding: 0.15rem 0.35rem; border-radius: 4px;
+  font-size: 0.875rem; font-family: var(--font-mono);
+}
+.markdown-content pre {
+  background: #1e1e1e; padding: 0; border-radius: 8px;
+  overflow-x: auto; margin: 0; font-size: 0.875rem;
+}
+.markdown-content pre code { background: none; padding: 0; color: inherit; }
+.markdown-content blockquote { border-left: 3px solid #DA7756; padding-left: 1rem; margin: 0.75rem 0; color: #6B6B68; }
+.markdown-content table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
+.markdown-content th, .markdown-content td { border: 1px solid #E5E2DB; padding: 0.5rem 0.75rem; text-align: left; }
+.markdown-content th { background: #f0ede6; font-weight: 600; }
+.markdown-content a { color: #DA7756; text-decoration: underline; }
+.markdown-content hr { border: none; border-top: 1px solid #E5E2DB; margin: 1rem 0; }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.streaming-cursor::after { content:'▋'; animation: blink 1s infinite; color: #DA7756; }
+
+@keyframes pulse-dot { 0%,80%,100%{transform:scale(0.6);opacity:0.4} 40%{transform:scale(1);opacity:1} }
+.thinking-dot:nth-child(1) { animation: pulse-dot 1.4s infinite 0s; }
+.thinking-dot:nth-child(2) { animation: pulse-dot 1.4s infinite 0.2s; }
+.thinking-dot:nth-child(3) { animation: pulse-dot 1.4s infinite 0.4s; }
