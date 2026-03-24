@@ -26,6 +26,7 @@ class LoginRequest(BaseModel):
 class UpdateProfileRequest(BaseModel):
     display_name: str | None = None
     theme: str | None = None
+    custom_instructions: str | None = None
 
 
 @router.post("/signup")
@@ -73,6 +74,8 @@ async def update_me(req: UpdateProfileRequest, user_id: str = Depends(get_curren
         user.display_name = req.display_name
     if req.theme is not None:
         user.theme = req.theme
+    if req.custom_instructions is not None:
+        user.custom_instructions = req.custom_instructions
     await db.commit()
     await db.refresh(user)
     return _user_dict(user)
@@ -107,5 +110,6 @@ def _user_dict(user: User) -> dict:
         "display_name": user.display_name,
         "avatar_url": user.avatar_url or "",
         "theme": user.theme,
+        "custom_instructions": user.custom_instructions or "",
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }

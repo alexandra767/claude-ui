@@ -248,6 +248,45 @@ export default function Chat() {
     resetStreamContent();
   };
 
+  const handleEdit = async (msg: Message) => {
+    if (!activeConversationId) return;
+    // Delete this message and everything after it
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`/api/chat/conversations/${activeConversationId}/messages/${msg.id}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      // Reload conversation
+      const data = await chatApi.getConversation(activeConversationId);
+      setMessages(data.messages || []);
+      // Put the old message text into the input (user can edit it)
+      const input = document.querySelector<HTMLTextAreaElement>('textarea');
+      if (input) { input.value = msg.content; input.focus(); input.dispatchEvent(new Event('input', { bubbles: true })); }
+    } catch {}
+  };
+
+  const handleRegenerate = async (msg: Message) => {
+    if (!activeConversationId || messages.length < 2) return;
+    // Find the user message before this assistant message
+    const idx = messages.findIndex(m => m.id === msg.id);
+    if (idx < 1) return;
+    const userMsg = messages[idx - 1];
+    // Delete the assistant message
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`/api/chat/conversations/${activeConversationId}/messages/${msg.id}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      // Reload and resend
+      const data = await chatApi.getConversation(activeConversationId);
+      setMessages(data.messages || []);
+      // Re-send the user's message
+      handleSend(userMsg.content, userMsg.attachments);
+    } catch {}
+  };
+
   const isEmpty = messages.length === 0 && !isStreaming;
 
   return (
@@ -278,7 +317,7 @@ export default function Chat() {
             ) : (
               <div className="max-w-3xl mx-auto">
                 {messages.map((msg) => (
-                  <MessageBubble key={msg.id} message={msg} />
+                  <MessageBubble key={msg.id} message={msg} onEdit={handleEdit} onRegenerate={handleRegenerate} />
                 ))}
                 {isStreaming && (
                   <>

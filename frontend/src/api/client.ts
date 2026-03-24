@@ -40,7 +40,7 @@ export const auth = {
   login: (data: { email: string; password: string }) =>
     request<{ token: string; user: any }>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
   me: () => request<any>('/auth/me'),
-  updateProfile: (data: { display_name?: string; theme?: string }) =>
+  updateProfile: (data: { display_name?: string; theme?: string; custom_instructions?: string }) =>
     request<any>('/auth/me', { method: 'PUT', body: JSON.stringify(data) }),
 };
 

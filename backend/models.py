@@ -18,6 +18,7 @@ class User(Base):
     display_name = Column(String, default="")
     avatar_url = Column(String, default="")
     theme = Column(String, default="system")
+    custom_instructions = Column(Text, default="")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")

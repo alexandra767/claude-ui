@@ -4,7 +4,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from database import get_db
-from models import Conversation, Message, Project
+from models import Conversation, Message, Project, User
 from auth import get_current_user
 from tools.executor import execute_tool
 from datetime import datetime, timezone
@@ -358,6 +358,71 @@ async def delete_conversation(convo_id: str, user_id: str = Depends(get_current_
     return {"ok": True}
 
 
+@router.delete("/conversations/{convo_id}/messages/{msg_id}")
+async def delete_messages_from(convo_id: str, msg_id: str, user_id: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Delete a message and all messages after it (for edit/regenerate)."""
+    await _get_convo(convo_id, user_id, db)
+    # Get the target message to find its timestamp
+    result = await db.execute(select(Message).where(Message.id == msg_id, Message.conversation_id == convo_id))
+    target = result.scalar_one_or_none()
+    if not target:
+        raise HTTPException(404, "Message not found")
+    # Delete this message and all after it
+    result = await db.execute(
+        select(Message).where(Message.conversation_id == convo_id, Message.created_at >= target.created_at)
+    )
+    for m in result.scalars().all():
+        await db.delete(m)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.get("/search")
+async def search_messages(q: str = "", user_id: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Search message content across all conversations."""
+    if not q.strip():
+        return []
+    result = await db.execute(
+        select(Message, Conversation)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .where(Conversation.user_id == user_id, Message.content.ilike(f"%{q}%"))
+        .order_by(desc(Message.created_at))
+        .limit(20)
+    )
+    results = []
+    for msg, convo in result.all():
+        results.append({
+            "conversation_id": convo.id,
+            "conversation_title": convo.title,
+            "message_id": msg.id,
+            "role": msg.role,
+            "snippet": msg.content[:200],
+            "created_at": msg.created_at.isoformat() if msg.created_at else None,
+        })
+    return results
+
+
+@router.get("/conversations/{convo_id}/export")
+async def export_conversation(convo_id: str, user_id: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Export conversation as markdown."""
+    from fastapi.responses import PlainTextResponse
+    convo = await _get_convo(convo_id, user_id, db)
+    result = await db.execute(select(Message).where(Message.conversation_id == convo_id).order_by(Message.created_at))
+    messages = result.scalars().all()
+
+    md = f"# {convo.title}\n\n"
+    md += f"*Exported on {datetime.now().strftime('%B %d, %Y')} | Model: {convo.model}*\n\n---\n\n"
+    for m in messages:
+        if m.role == "user":
+            md += f"## You\n\n{m.content}\n\n"
+        elif m.role == "assistant":
+            md += f"## Assistant\n\n{m.content}\n\n"
+        md += "---\n\n"
+    return PlainTextResponse(md, media_type="text/markdown", headers={
+        "Content-Disposition": f'attachment; filename="{convo.title[:50].replace(" ", "_")}.md"'
+    })
+
+
 # ── Chat with Tool Loop ────────────────────────────────────────────────────
 
 @router.post("/send")
@@ -387,6 +452,12 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
         timezone=tz,
         datetime_now=datetime.now().strftime("%A, %B %d, %Y %I:%M %p"),
     )
+    # Add custom instructions from user profile
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    user_obj = user_result.scalar_one_or_none()
+    if user_obj and user_obj.custom_instructions:
+        system += f"\n\nUser's custom instructions: {user_obj.custom_instructions}"
+
     if req.project_id:
         proj_result = await db.execute(select(Project).where(Project.id == req.project_id))
         project = proj_result.scalar_one_or_none()

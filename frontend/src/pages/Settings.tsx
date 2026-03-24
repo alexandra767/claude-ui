@@ -18,6 +18,7 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState<Tab>('profile');
   const [displayName, setDisplayName] = useState(user?.display_name || '');
   const [theme, setTheme] = useState(user?.theme || 'system');
+  const [customInstructions, setCustomInstructions] = useState(user?.custom_instructions || '');
   const [saved, setSaved] = useState(false);
   const [models, setModels] = useState<string[]>([]);
 
@@ -30,7 +31,7 @@ export default function Settings() {
 
   const saveProfile = async () => {
     try {
-      await auth.updateProfile({ display_name: displayName, theme });
+      await auth.updateProfile({ display_name: displayName, theme, custom_instructions: customInstructions });
       updateUser({ display_name: displayName, theme });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -131,6 +132,18 @@ export default function Settings() {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   className="w-full max-w-md px-4 py-2.5 rounded-xl border border-border bg-cream focus:outline-none focus:ring-2 focus:ring-accent/30 text-text-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-text-primary mb-1.5">Custom Instructions</label>
+                <p className="text-xs text-text-secondary mb-2">Tell the AI about yourself and how you want it to respond. These apply to all conversations.</p>
+                <textarea
+                  value={customInstructions}
+                  onChange={(e) => setCustomInstructions(e.target.value)}
+                  rows={5}
+                  className="w-full px-4 py-3 rounded-xl border border-border bg-cream focus:outline-none focus:ring-2 focus:ring-accent/30 text-text-primary resize-none text-sm"
+                  placeholder="e.g., I'm a software developer. I prefer concise answers with code examples. Use Python unless I specify otherwise."
                 />
               </div>
 

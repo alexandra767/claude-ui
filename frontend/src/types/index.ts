@@ -5,6 +5,7 @@ export interface User {
   display_name: string;
   avatar_url: string;
   theme: string;
+  custom_instructions: string;
   created_at: string;
 }
 

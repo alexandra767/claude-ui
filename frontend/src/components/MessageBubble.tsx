@@ -4,7 +4,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import vscDarkPlus from 'react-syntax-highlighter/dist/esm/styles/prism/vsc-dark-plus';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
-import { Copy, Check, User, Sparkles, ChevronRight, ChevronDown, Download, Maximize2, Brain } from 'lucide-react';
+import { Copy, Check, User, Sparkles, ChevronRight, ChevronDown, Download, Maximize2, Brain, Pencil, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import type { Message, Artifact } from '../types';
 
@@ -12,9 +12,11 @@ interface Props {
   message: Message;
   isStreaming?: boolean;
   streamContent?: string;
+  onEdit?: (message: Message) => void;
+  onRegenerate?: (message: Message) => void;
 }
 
-export default function MessageBubble({ message, isStreaming, streamContent }: Props) {
+export default function MessageBubble({ message, isStreaming, streamContent, onEdit, onRegenerate }: Props) {
   const rawContent = isStreaming ? streamContent || '' : message.content;
   // Strip markdown images that point to generated_imgs (they display via the image card instead)
   const content = message.images?.length
@@ -25,7 +27,7 @@ export default function MessageBubble({ message, isStreaming, streamContent }: P
   const avatarUrl = useAuthStore((s) => s.user?.avatar_url);
 
   return (
-    <div className={`flex gap-4 py-6 px-4 ${isUser ? '' : ''}`}>
+    <div className="group flex gap-4 py-6 px-4">
       {/* Avatar */}
       {isUser && avatarUrl ? (
         <img src={avatarUrl} alt="" className="shrink-0 w-8 h-8 rounded-full object-cover" />
@@ -149,6 +151,22 @@ export default function MessageBubble({ message, isStreaming, streamContent }: P
                 <ChevronRight className="w-4 h-4 text-text-secondary group-hover:text-accent transition" />
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Edit / Regenerate buttons */}
+        {!isStreaming && (
+          <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition">
+            {isUser && onEdit && (
+              <button onClick={() => onEdit(message)} className="p-1 rounded text-text-secondary/50 hover:text-text-primary transition" title="Edit">
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {!isUser && onRegenerate && (
+              <button onClick={() => onRegenerate(message)} className="p-1 rounded text-text-secondary/50 hover:text-text-primary transition" title="Regenerate">
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
       </div>
