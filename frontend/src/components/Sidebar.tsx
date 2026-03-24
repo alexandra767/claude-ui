@@ -5,7 +5,7 @@ import { useAuthStore } from '../stores/authStore';
 import { chat } from '../api/client';
 import {
   Plus, Search, MessageSquare, Star, Trash2, Pencil, Check, X,
-  Settings, FolderOpen, LogOut, ChevronDown, Sparkles
+  Settings, FolderOpen, LogOut, ChevronDown, Sparkles, Send
 } from 'lucide-react';
 import type { Conversation } from '../types';
 
@@ -176,6 +176,12 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
             className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${location.pathname.startsWith('/projects') ? 'bg-sidebar-active text-text-sidebar' : 'text-text-sidebar-dim hover:bg-sidebar-hover hover:text-text-sidebar'}`}
           >
             <FolderOpen className="w-4 h-4" /> Projects
+          </button>
+          <button
+            onClick={() => { navigate('/share'); onClose(); }}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${location.pathname === '/share' ? 'bg-sidebar-active text-text-sidebar' : 'text-text-sidebar-dim hover:bg-sidebar-hover hover:text-text-sidebar'}`}
+          >
+            <Send className="w-4 h-4" /> Share
           </button>
           <button
             onClick={() => { navigate('/settings'); onClose(); }}

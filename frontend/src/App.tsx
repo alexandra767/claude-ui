@@ -7,6 +7,7 @@ import Chat from './pages/Chat';
 import Settings from './pages/Settings';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/ProjectDetail';
+import Share from './pages/Share';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -32,6 +33,7 @@ export default function App() {
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
       <Route path="/projects/:projectId" element={<ProtectedRoute><ProjectDetail /></ProtectedRoute>} />
+      <Route path="/share" element={<ProtectedRoute><Share /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

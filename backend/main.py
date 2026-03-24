@@ -13,10 +13,14 @@ from routes.chat_routes import router as chat_router
 from routes.project_routes import router as project_router
 from routes.tool_routes import router as tool_router
 from routes.file_routes import router as file_router
+from routes.share_routes import router as share_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Import models so tables are created
+    import models  # noqa
+    from routes.share_routes import SharedItem  # noqa
     await init_db()
     yield
 
@@ -36,6 +40,7 @@ app.include_router(chat_router)
 app.include_router(project_router)
 app.include_router(tool_router)
 app.include_router(file_router)
+app.include_router(share_router)
 
 # Serve uploaded files
 uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
