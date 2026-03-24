@@ -658,26 +658,29 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
             yield f"data: {json.dumps({'type': 'artifacts', 'artifacts': inline_artifacts})}\n\n"
 
         # Save assistant message
-        async with get_db_session() as save_db:
-            assistant_msg = Message(
-                conversation_id=convo.id,
-                role="assistant",
-                content=full_response,
-                model=req.model,
-                artifacts=all_artifacts if all_artifacts else None,
-                tool_calls=all_tool_calls if all_tool_calls else None,
-                images=all_images if all_images else None,
-                thinking=all_thinking if all_thinking else None,
-            )
-            save_db.add(assistant_msg)
+        try:
+            async with get_db_session() as save_db:
+                assistant_msg = Message(
+                    conversation_id=convo.id,
+                    role="assistant",
+                    content=full_response,
+                    model=req.model,
+                    artifacts=all_artifacts if all_artifacts else None,
+                    tool_calls=all_tool_calls if all_tool_calls else None,
+                    images=all_images if all_images else None,
+                    thinking=all_thinking if all_thinking else None,
+                )
+                save_db.add(assistant_msg)
 
-            if len(all_msgs) <= 1:
-                title = _generate_title(req.message)
-                stmt = select(Conversation).where(Conversation.id == convo.id)
-                result = await save_db.execute(stmt)
-                c = result.scalar_one()
-                c.title = title
-            await save_db.commit()
+                if len(all_msgs) <= 1:
+                    title = _generate_title(req.message)
+                    stmt = select(Conversation).where(Conversation.id == convo.id)
+                    result = await save_db.execute(stmt)
+                    c = result.scalar_one()
+                    c.title = title
+                await save_db.commit()
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to save message: {e}'})}\n\n"
 
         yield f"data: {json.dumps({'type': 'done', 'conversation_id': convo.id})}\n\n"
 

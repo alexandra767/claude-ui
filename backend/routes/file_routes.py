@@ -12,12 +12,13 @@ UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
 async def upload_file(file: UploadFile = File(...), user_id: str = Depends(get_current_user)):
     user_dir = os.path.join(UPLOAD_DIR, "chat", user_id)
     os.makedirs(user_dir, exist_ok=True)
-    filepath = os.path.join(user_dir, file.filename)
+    safe_filename = os.path.basename(file.filename or "upload")
+    filepath = os.path.join(user_dir, safe_filename)
     async with aiofiles.open(filepath, "wb") as f:
         content = await file.read()
         await f.write(content)
     return {
-        "filename": file.filename,
+        "filename": safe_filename,
         "path": filepath,
         "type": file.content_type or "",
         "size": len(content),

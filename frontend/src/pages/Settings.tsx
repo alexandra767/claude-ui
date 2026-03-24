@@ -32,7 +32,7 @@ export default function Settings() {
   const saveProfile = async () => {
     try {
       await auth.updateProfile({ display_name: displayName, theme, custom_instructions: customInstructions });
-      updateUser({ display_name: displayName, theme });
+      updateUser({ display_name: displayName, theme, custom_instructions: customInstructions });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch {}

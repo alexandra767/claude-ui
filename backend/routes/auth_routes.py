@@ -91,7 +91,9 @@ async def upload_avatar(file: UploadFile = File(...), user_id: str = Depends(get
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "User not found")
-    ext = os.path.splitext(file.filename or ".png")[1]
+    ext = os.path.splitext(file.filename or ".png")[1].lower()
+    if ext not in (".jpg", ".jpeg", ".png", ".gif", ".webp"):
+        raise HTTPException(400, "Invalid image format. Use JPG, PNG, GIF, or WEBP.")
     filename = f"{user_id}{ext}"
     filepath = os.path.join(AVATAR_DIR, filename)
     async with aiofiles.open(filepath, "wb") as f:

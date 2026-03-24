@@ -76,6 +76,9 @@ export default function MessageBubble({ message, isStreaming, streamContent, onE
                   }
                   return <code className={className} {...props}>{children}</code>;
                 },
+                a({ href, children, ...props }) {
+                  return <a href={href} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
+                },
                 img({ src, alt, ...props }) {
                   // Hide generated images from markdown — they show in the image card below
                   if ((src || '').includes('generated_imgs')) return null;

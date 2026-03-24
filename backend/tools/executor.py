@@ -651,7 +651,7 @@ async def _edit_image(args: dict) -> dict:
                     with open(output_path, "wb") as f:
                         f.write(img_bytes)
 
-                    return {"success": True, "file_path": output_path, "message": f"Image edited and saved to {output_path}"}
+                    return {"success": True, "file_path": output_path, "filename": filename, "prompt": prompt, "message": f"Image edited and saved to {output_path}"}
 
         return {"success": False, "error": "No image in response"}
     except Exception as e:

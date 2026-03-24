@@ -27,7 +27,7 @@ class User(Base):
 class Conversation(Base):
     __tablename__ = "conversations"
     id = Column(String, primary_key=True, default=new_id)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     title = Column(String, default="New conversation")
     model = Column(String, default="qwen3.5:122b")
     project_id = Column(String, ForeignKey("projects.id"), nullable=True)
@@ -42,7 +42,7 @@ class Conversation(Base):
 class Message(Base):
     __tablename__ = "messages"
     id = Column(String, primary_key=True, default=new_id)
-    conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False)
+    conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False, index=True)
     role = Column(String, nullable=False)  # user, assistant, system, tool
     content = Column(Text, default="")
     model = Column(String, nullable=True)

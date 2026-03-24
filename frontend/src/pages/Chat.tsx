@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useChatStore } from '../stores/chatStore';
 import { chat as chatApi } from '../api/client';
 import Sidebar from '../components/Sidebar';
@@ -41,6 +41,8 @@ const TOOL_META: Record<string, { label: string; icon: typeof Terminal }> = {
 export default function Chat() {
   const { conversationId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get('project') || undefined;
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [streamStats, setStreamStats] = useState<StreamStats | null>(null);
@@ -122,6 +124,7 @@ export default function Chat() {
         conversation_id: activeConversationId || undefined,
         message: text,
         model: selectedModel,
+        project_id: projectId,
         attachments,
       });
 
