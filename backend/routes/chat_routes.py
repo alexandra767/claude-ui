@@ -440,6 +440,11 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
                                 # Stream text tokens to the client
                                 if "message" in data:
                                     msg = data["message"]
+
+                                    # Handle thinking tokens (qwen3.5 sends these before tool calls)
+                                    if msg.get("thinking"):
+                                        yield f"data: {json.dumps({'type': 'thinking', 'content': msg['thinking']})}\n\n"
+
                                     if msg.get("content"):
                                         chunk = msg["content"]
                                         response_text += chunk
@@ -491,6 +496,10 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
                         }
                         all_artifacts.append(artifact)
                         yield f"data: {json.dumps({'type': 'artifact', 'artifact': artifact})}\n\n"
+
+                    # If image was generated, send it to the frontend
+                    if tool_name in ("generate_image", "edit_image") and tool_result.get("success") and tool_result.get("filename"):
+                        yield f"data: {json.dumps({'type': 'image', 'filename': tool_result['filename'], 'prompt': tool_result.get('prompt', '')})}\n\n"
 
                     yield f"data: {json.dumps({'type': 'tool_result', 'name': tool_name, 'result': tool_result})}\n\n"
 

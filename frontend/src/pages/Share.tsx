@@ -54,7 +54,12 @@ export default function Share() {
 
   useEffect(() => {
     loadItems();
-    const interval = setInterval(loadItems, 5000); // Poll every 5s for new items
+    // Only poll when the Share page is visible
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && window.location.pathname === '/share') {
+        loadItems();
+      }
+    }, 15000); // Poll every 15s
     return () => clearInterval(interval);
   }, [loadItems]);
 

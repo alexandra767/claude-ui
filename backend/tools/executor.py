@@ -447,32 +447,100 @@ def _call_mcp_tool(name: str, arguments: dict) -> dict:
 
 
 async def _generate_image(args: dict) -> dict:
-    """Generate an image using nano-banana MCP server."""
-    from tools.mcp_client import call_mcp_tool
+    """Generate an image using Gemini API directly (same as Jarvis)."""
+    from google import genai
+    import base64 as b64
+    import uuid as _uuid
+
     prompt = args.get("prompt", "")
-    result = call_mcp_tool("nano-banana", "generate_image", {"prompt": prompt}, timeout=120)
-    # Parse the result to find the file path
-    output = _extract_mcp_text(result)
-    return {"result": output, "prompt": prompt}
+    api_key = os.environ.get("GEMINI_API_KEY", "AIzaSyDjIbgbtNzkHw3wHNN1FUlSJFhKaNn5fjU")
+
+    try:
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-image",
+            contents=prompt,
+        )
+
+        # Extract image from response
+        if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.mime_type and part.inline_data.mime_type.startswith("image/"):
+                    output_dir = os.path.expanduser("~/generated_imgs")
+                    os.makedirs(output_dir, exist_ok=True)
+                    filename = f"{_uuid.uuid4().hex[:12]}.png"
+                    output_path = os.path.join(output_dir, filename)
+
+                    img_bytes = part.inline_data.data
+                    if isinstance(img_bytes, str):
+                        img_bytes = b64.b64decode(img_bytes)
+                    with open(output_path, "wb") as f:
+                        f.write(img_bytes)
+
+                    return {
+                        "success": True,
+                        "file_path": output_path,
+                        "filename": filename,
+                        "prompt": prompt,
+                        "message": f"Image generated and saved to {output_path}",
+                    }
+
+        # Check if there's text content (sometimes Gemini returns text instead)
+        text_parts = [p.text for p in response.candidates[0].content.parts if hasattr(p, 'text') and p.text]
+        if text_parts:
+            return {"success": False, "error": "Gemini returned text instead of image", "text": " ".join(text_parts)}
+
+        return {"success": False, "error": "No image found in Gemini response"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 async def _edit_image(args: dict) -> dict:
-    """Edit an existing image using nano-banana MCP server."""
-    from tools.mcp_client import call_mcp_tool
-    result = call_mcp_tool("nano-banana", "edit_image", {
-        "imagePath": args.get("image_path", ""),
-        "prompt": args.get("prompt", ""),
-    }, timeout=120)
-    output = _extract_mcp_text(result)
-    return {"result": output}
+    """Edit an existing image using Gemini API."""
+    from google import genai
+    from google.genai import types
+    import base64 as b64
+    import uuid as _uuid
 
+    image_path = args.get("image_path", "")
+    prompt = args.get("prompt", "")
+    api_key = os.environ.get("GEMINI_API_KEY", "AIzaSyDjIbgbtNzkHw3wHNN1FUlSJFhKaNn5fjU")
 
-def _extract_mcp_text(result: dict) -> str:
-    """Extract text content from MCP response."""
-    if isinstance(result, dict) and "content" in result:
-        contents = result["content"]
-        if isinstance(contents, list):
-            texts = [c.get("text", "") for c in contents if c.get("type") == "text"]
-            if texts:
-                return "\n".join(texts)
-    return str(result)
+    if not os.path.exists(image_path):
+        return {"success": False, "error": f"Image not found: {image_path}"}
+
+    try:
+        client = genai.Client(api_key=api_key)
+
+        with open(image_path, "rb") as f:
+            img_data = f.read()
+
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-image",
+            contents=[
+                types.Content(parts=[
+                    types.Part.from_bytes(data=img_data, mime_type="image/png"),
+                    types.Part.from_text(text=prompt),
+                ])
+            ],
+        )
+
+        if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'inline_data') and part.inline_data and part.inline_data.mime_type and part.inline_data.mime_type.startswith("image/"):
+                    output_dir = os.path.expanduser("~/generated_imgs")
+                    os.makedirs(output_dir, exist_ok=True)
+                    filename = f"{_uuid.uuid4().hex[:12]}_edited.png"
+                    output_path = os.path.join(output_dir, filename)
+
+                    img_bytes = part.inline_data.data
+                    if isinstance(img_bytes, str):
+                        img_bytes = b64.b64decode(img_bytes)
+                    with open(output_path, "wb") as f:
+                        f.write(img_bytes)
+
+                    return {"success": True, "file_path": output_path, "message": f"Image edited and saved to {output_path}"}
+
+        return {"success": False, "error": "No image in response"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}

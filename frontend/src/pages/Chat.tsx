@@ -47,6 +47,7 @@ export default function Chat() {
   const [liveTokenCount, setLiveTokenCount] = useState(0);
   const [liveTps, setLiveTps] = useState(0);
   const [activeTools, setActiveTools] = useState<ActiveTool[]>([]);
+  const [isThinking, setIsThinking] = useState(false);
   const streamStartRef = useRef<number>(0);
   const tokenCountRef = useRef<number>(0);
 
@@ -95,6 +96,7 @@ export default function Chat() {
     setLiveTokenCount(0);
     setLiveTps(0);
     setActiveTools([]);
+    setIsThinking(false);
     streamStartRef.current = Date.now();
     tokenCountRef.current = 0;
 
@@ -113,6 +115,7 @@ export default function Chat() {
       let fullContent = '';
       let newConvoId = activeConversationId;
       let artifacts: any[] = [];
+      let generatedImages: { filename: string; prompt: string }[] = [];
       let ollamaEvalCount = 0;
       let ollamaEvalDuration = 0;
 
@@ -128,7 +131,11 @@ export default function Chat() {
           try {
             const data = JSON.parse(line.slice(6));
             switch (data.type) {
+              case 'thinking':
+                setIsThinking(true);
+                break;
               case 'token':
+                setIsThinking(false);
                 fullContent += data.content;
                 appendStreamContent(data.content);
                 tokenCountRef.current++;
@@ -149,6 +156,9 @@ export default function Chat() {
                     ? { ...t, status: 'done', result: data.result }
                     : t
                 ));
+                break;
+              case 'image':
+                generatedImages.push({ filename: data.filename, prompt: data.prompt || '' });
                 break;
               case 'artifact':
                 artifacts.push(data.artifact);
@@ -183,6 +193,7 @@ export default function Chat() {
         content: fullContent,
         model: selectedModel,
         artifacts: artifacts.length > 0 ? artifacts : undefined,
+        images: generatedImages.length > 0 ? generatedImages : undefined,
         created_at: new Date().toISOString(),
       };
       addMessage(assistantMsg);
@@ -241,6 +252,20 @@ export default function Chat() {
                 ))}
                 {isStreaming && (
                   <>
+                    {/* Thinking indicator */}
+                    {isThinking && activeTools.length === 0 && !streamingContent && (
+                      <div className="flex items-center gap-3 px-16 py-4">
+                        <div className="flex items-center gap-2 text-sm text-text-secondary">
+                          <Sparkles className="w-4 h-4 text-accent" />
+                          <span>Thinking</span>
+                          <span className="flex gap-0.5 ml-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-accent thinking-dot" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-accent thinking-dot" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-accent thinking-dot" />
+                          </span>
+                        </div>
+                      </div>
+                    )}
                     {/* Tool activity indicators */}
                     {activeTools.length > 0 && (
                       <div className="px-16 py-2 space-y-1.5">

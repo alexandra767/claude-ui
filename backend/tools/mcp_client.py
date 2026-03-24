@@ -70,21 +70,21 @@ class MCPClient:
             return None
 
     def _read_stdout(self):
-        buf = ""
+        """Read JSON-RPC responses line by line from stdout."""
         while self.process and self.process.poll() is None:
             try:
-                chunk = self.process.stdout.read(1)
-                if not chunk:
+                line = self.process.stdout.readline()
+                if not line:
                     break
-                buf += chunk.decode("utf-8", errors="replace")
-                # Try to parse complete JSON objects
-                while buf.strip():
-                    try:
-                        obj, end = json.JSONDecoder().raw_decode(buf.strip())
-                        self.response_queue.put(obj)
-                        buf = buf.strip()[end:].strip()
-                    except json.JSONDecodeError:
-                        break
+                text = line.decode("utf-8", errors="replace").strip()
+                if not text:
+                    continue
+                try:
+                    obj = json.loads(text)
+                    self.response_queue.put(obj)
+                except json.JSONDecodeError:
+                    # Might be partial — accumulate
+                    pass
             except Exception:
                 break
 

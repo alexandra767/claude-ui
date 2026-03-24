@@ -47,6 +47,11 @@ uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(uploads_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
+# Serve generated images
+generated_imgs_dir = os.path.expanduser("~/generated_imgs")
+os.makedirs(generated_imgs_dir, exist_ok=True)
+app.mount("/generated", StaticFiles(directory=generated_imgs_dir), name="generated")
+
 
 @app.get("/api/health")
 async def health():

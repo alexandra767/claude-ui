@@ -25,6 +25,7 @@ export interface Message {
   model?: string;
   artifacts?: Artifact[];
   attachments?: Attachment[];
+  images?: { filename: string; prompt: string }[];
   tool_calls?: ToolCall[];
   tool_results?: ToolResult[];
   token_count?: number;

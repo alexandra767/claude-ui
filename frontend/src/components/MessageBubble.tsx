@@ -3,7 +3,7 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import vscDarkPlus from 'react-syntax-highlighter/dist/esm/styles/prism/vsc-dark-plus';
 import { useChatStore } from '../stores/chatStore';
-import { Copy, Check, User, Sparkles, ChevronRight } from 'lucide-react';
+import { Copy, Check, User, Sparkles, ChevronRight, Download } from 'lucide-react';
 import { useState } from 'react';
 import type { Message, Artifact } from '../types';
 
@@ -59,10 +59,66 @@ export default function MessageBubble({ message, isStreaming, streamContent }: P
                   }
                   return <code className={className} {...props}>{children}</code>;
                 },
+                img({ src, alt, ...props }) {
+                  // Rewrite local file paths to served URLs
+                  let fixedSrc = src || '';
+                  if (fixedSrc.includes('/generated_imgs/')) {
+                    const filename = fixedSrc.split('/').pop();
+                    fixedSrc = `/generated/${filename}`;
+                  }
+                  return (
+                    <img
+                      src={fixedSrc}
+                      alt={alt}
+                      className="max-w-full max-h-[500px] rounded-xl border border-border my-2"
+                      loading="lazy"
+                      {...props}
+                    />
+                  );
+                },
               }}
             >
               {content}
             </ReactMarkdown>
+          </div>
+        )}
+
+        {/* Generated Images */}
+        {message.images && message.images.length > 0 && (
+          <div className="mt-3 space-y-3">
+            {message.images.filter((img, i, arr) => arr.findIndex(x => x.filename === img.filename) === i).map((img, i) => (
+              <div key={i} className="rounded-xl overflow-hidden border border-border bg-white">
+                <img
+                  src={`/generated/${img.filename}`}
+                  alt={img.prompt}
+                  className="max-w-full max-h-[500px] object-contain"
+                  loading="lazy"
+                />
+                <div className="flex items-center justify-between px-3 py-2 border-t border-border bg-cream/50">
+                  <span className="text-xs text-text-secondary truncate max-w-[60%]">{img.prompt}</span>
+                  <div className="flex items-center gap-1">
+                    <a
+                      href={`/generated/${img.filename}`}
+                      download={img.filename}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-cream transition"
+                    >
+                      <Download className="w-3 h-3" /> Save
+                    </a>
+                    <button
+                      onClick={() => {
+                        fetch(`/generated/${img.filename}`)
+                          .then(r => r.blob())
+                          .then(blob => navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]))
+                          .catch(() => {});
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-cream transition"
+                    >
+                      <Copy className="w-3 h-3" /> Copy
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
