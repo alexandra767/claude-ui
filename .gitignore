@@ -12,3 +12,4 @@ backend/tools/*_token.json
 backend/tools/google_credentials.json
 backend/tools/google_token.json
 backend/generated_imgs/
+backend/tools/google_credentials_drive.json

@@ -1,4 +1,4 @@
-"""Google OAuth2 authentication for Gmail and Calendar."""
+"""Google OAuth2 authentication for Gmail, Calendar, and Drive/Docs."""
 import os
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -7,9 +7,12 @@ from googleapiclient.discovery import build
 TOOLS_DIR = os.path.dirname(__file__)
 GMAIL_TOKEN_PATH = os.path.join(TOOLS_DIR, "gmail_token.json")
 CALENDAR_TOKEN_PATH = os.path.join(TOOLS_DIR, "calendar_token.json")
+DRIVE_TOKEN_PATH = os.path.join(TOOLS_DIR, "drive_token.json")
 
 _gmail_service = None
 _calendar_service = None
+_drive_service = None
+_docs_service = None
 
 
 def _load_creds(token_path: str, scopes: list[str]) -> Credentials | None:
@@ -56,5 +59,37 @@ def get_calendar_service():
     return _calendar_service
 
 
+def get_drive_service():
+    global _drive_service
+    if _drive_service:
+        return _drive_service
+    creds = _load_creds(DRIVE_TOKEN_PATH, [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/documents",
+    ])
+    if not creds:
+        return None
+    _drive_service = build("drive", "v3", credentials=creds)
+    return _drive_service
+
+
+def get_docs_service():
+    global _docs_service
+    if _docs_service:
+        return _docs_service
+    creds = _load_creds(DRIVE_TOKEN_PATH, [
+        "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/documents",
+    ])
+    if not creds:
+        return None
+    _docs_service = build("docs", "v1", credentials=creds)
+    return _docs_service
+
+
 def is_google_connected() -> bool:
     return os.path.exists(GMAIL_TOKEN_PATH) or os.path.exists(CALENDAR_TOKEN_PATH)
+
+
+def is_drive_connected() -> bool:
+    return os.path.exists(DRIVE_TOKEN_PATH)

@@ -274,6 +274,63 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "drive_list_files",
+            "description": "List recent files in Google Drive, optionally filtered by name.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Optional filename search query"},
+                    "max_results": {"type": "integer", "description": "Max files to return", "default": 15},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "drive_search",
+            "description": "Search Google Drive files by content (full-text search).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query to find in file contents"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "drive_read_doc",
+            "description": "Read the text content of a Google Doc by its document ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string", "description": "Google Doc document ID"},
+                },
+                "required": ["document_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "drive_create_doc",
+            "description": "Create a new Google Doc with a title and content.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Document title"},
+                    "content": {"type": "string", "description": "Document text content"},
+                },
+                "required": ["title", "content"],
+            },
+        },
+    },
 ]
 
 SYSTEM_PROMPT_TEMPLATE = """You are a helpful AI assistant with access to powerful tools. Use them whenever they would help answer the user's question.
@@ -295,6 +352,10 @@ Available tools:
 - **create_artifact**: Create rich content (code, HTML, SVG, docs) shown in a side panel
 - **generate_image**: Generate images from text descriptions using AI (Gemini)
 - **edit_image**: Edit/modify existing images with AI
+- **drive_list_files**: List recent files in Google Drive
+- **drive_search**: Search Google Drive by content
+- **drive_read_doc**: Read a Google Doc's text content
+- **drive_create_doc**: Create a new Google Doc
 
 Guidelines:
 - Use tools proactively — don't just describe what you could do, actually do it

@@ -33,6 +33,10 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "gmail_send": _gmail_send,
         "calendar_list": _calendar_list,
         "calendar_create": _calendar_create,
+        "drive_search": _drive_search,
+        "drive_read_doc": _drive_read_doc,
+        "drive_create_doc": _drive_create_doc,
+        "drive_list_files": _drive_list_files,
     }
     handler = handlers.get(name)
     if not handler:
@@ -424,6 +428,125 @@ async def _calendar_create(args: dict) -> dict:
         "id": event.get("id"),
         "summary": event.get("summary"),
         "link": event.get("htmlLink", ""),
+    }
+
+
+# ── Google Drive / Docs ─────────────────────────────────────────────────────
+
+async def _drive_list_files(args: dict) -> dict:
+    from tools.google_auth import get_drive_service
+    service = get_drive_service()
+    if not service:
+        return {"error": "Google Drive not connected. Run: python3 backend/tools/google_docs_setup.py"}
+    query = args.get("query", "")
+    max_results = args.get("max_results", 15)
+    q_parts = ["trashed=false"]
+    if query:
+        q_parts.append(f"name contains '{query}'")
+    results = service.files().list(
+        q=" and ".join(q_parts),
+        pageSize=max_results,
+        fields="files(id, name, mimeType, modifiedTime, webViewLink, size)",
+        orderBy="modifiedTime desc",
+    ).execute()
+    files = []
+    for f in results.get("files", []):
+        files.append({
+            "id": f["id"],
+            "name": f["name"],
+            "type": f.get("mimeType", ""),
+            "modified": f.get("modifiedTime", ""),
+            "link": f.get("webViewLink", ""),
+            "size": f.get("size", ""),
+        })
+    return {"files": files, "count": len(files)}
+
+
+async def _drive_search(args: dict) -> dict:
+    from tools.google_auth import get_drive_service
+    service = get_drive_service()
+    if not service:
+        return {"error": "Google Drive not connected. Run: python3 backend/tools/google_docs_setup.py"}
+    query = args.get("query", "")
+    results = service.files().list(
+        q=f"fullText contains '{query}' and trashed=false",
+        pageSize=10,
+        fields="files(id, name, mimeType, modifiedTime, webViewLink)",
+        orderBy="modifiedTime desc",
+    ).execute()
+    files = [{"id": f["id"], "name": f["name"], "type": f.get("mimeType", ""), "link": f.get("webViewLink", "")} for f in results.get("files", [])]
+    return {"files": files, "count": len(files), "query": query}
+
+
+async def _drive_read_doc(args: dict) -> dict:
+    from tools.google_auth import get_docs_service, get_drive_service
+    doc_id = args.get("document_id", "")
+    if not doc_id:
+        return {"error": "document_id is required"}
+
+    # Try Google Docs first
+    docs_service = get_docs_service()
+    if docs_service:
+        try:
+            doc = docs_service.documents().get(documentId=doc_id).execute()
+            # Extract text content
+            content = ""
+            for element in doc.get("body", {}).get("content", []):
+                if "paragraph" in element:
+                    for el in element["paragraph"].get("elements", []):
+                        if "textRun" in el:
+                            content += el["textRun"].get("content", "")
+            title = doc.get("title", "")
+            if len(content) > 10000:
+                content = content[:10000] + "\n\n...(truncated)"
+            return {"title": title, "content": content, "document_id": doc_id}
+        except Exception:
+            pass
+
+    # Fallback: try downloading as plain text via Drive
+    drive_service = get_drive_service()
+    if not drive_service:
+        return {"error": "Google Drive not connected. Run: python3 backend/tools/google_docs_setup.py"}
+    try:
+        import io
+        from googleapiclient.http import MediaIoBaseDownload
+        request = drive_service.files().export_media(fileId=doc_id, mimeType="text/plain")
+        buf = io.BytesIO()
+        downloader = MediaIoBaseDownload(buf, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+        content = buf.getvalue().decode("utf-8", errors="replace")
+        if len(content) > 10000:
+            content = content[:10000] + "\n\n...(truncated)"
+        return {"content": content, "document_id": doc_id}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+async def _drive_create_doc(args: dict) -> dict:
+    from tools.google_auth import get_docs_service
+    service = get_docs_service()
+    if not service:
+        return {"error": "Google Docs not connected. Run: python3 backend/tools/google_docs_setup.py"}
+
+    title = args.get("title", "Untitled")
+    content = args.get("content", "")
+
+    # Create the doc
+    doc = service.documents().create(body={"title": title}).execute()
+    doc_id = doc["documentId"]
+
+    # Add content
+    if content:
+        requests = [{"insertText": {"location": {"index": 1}, "text": content}}]
+        service.documents().batchUpdate(documentId=doc_id, body={"requests": requests}).execute()
+
+    return {
+        "created": True,
+        "document_id": doc_id,
+        "title": title,
+        "link": f"https://docs.google.com/document/d/{doc_id}/edit",
     }
 
 
