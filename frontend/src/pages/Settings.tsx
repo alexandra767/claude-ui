@@ -161,8 +161,8 @@ export default function Settings() {
                     <button
                       key={id}
                       onClick={() => { setTheme(id); applyTheme(id); }}
-                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border transition ${
-                        theme === id ? 'border-accent bg-accent/5 text-accent' : 'border-border text-text-secondary hover:border-accent/30'
+                      className={`flex items-center gap-2 px-4 py-3 rounded-xl border-2 transition cursor-pointer ${
+                        theme === id ? 'border-accent bg-accent/15 text-accent font-semibold' : 'border-border bg-cream text-text-primary hover:border-accent/40'
                       }`}
                     >
                       <Icon className="w-4 h-4" />
