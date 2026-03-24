@@ -6,7 +6,7 @@ import Sidebar from '../components/Sidebar';
 import ChatInput from '../components/ChatInput';
 import MessageBubble from '../components/MessageBubble';
 import ArtifactPanel from '../components/ArtifactPanel';
-import { Menu, Sparkles, Zap, Terminal, Search, Globe, Mail, Calendar, Calculator, Clock, FileCode } from 'lucide-react';
+import { Menu, Sparkles, Zap, Terminal, Search, Globe, Mail, Calendar, Calculator, Clock, FileCode, Image as ImageIcon } from 'lucide-react';
 import type { Message, Attachment } from '../types';
 
 interface StreamStats {
@@ -34,6 +34,8 @@ const TOOL_META: Record<string, { label: string; icon: typeof Terminal }> = {
   get_datetime: { label: 'Getting date/time', icon: Clock },
   calculator: { label: 'Calculating', icon: Calculator },
   create_artifact: { label: 'Creating artifact', icon: FileCode },
+  generate_image: { label: 'Generating image', icon: ImageIcon },
+  edit_image: { label: 'Editing image', icon: ImageIcon },
 };
 
 export default function Chat() {

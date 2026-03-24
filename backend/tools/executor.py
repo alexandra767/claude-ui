@@ -14,6 +14,10 @@ from bs4 import BeautifulSoup
 
 async def execute_tool(name: str, arguments: dict) -> dict:
     """Execute a tool by name and return the result."""
+    # Check if it's an MCP tool (prefixed with mcp__)
+    if name.startswith("mcp__"):
+        return _call_mcp_tool(name, arguments)
+
     handlers = {
         "execute_code": _execute_code,
         "web_search": _web_search,
@@ -22,6 +26,8 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "get_weather": _get_weather,
         "calculator": _calculator,
         "create_artifact": _create_artifact,
+        "generate_image": _generate_image,
+        "edit_image": _edit_image,
         "gmail_search": _gmail_search,
         "gmail_read": _gmail_read,
         "gmail_send": _gmail_send,
@@ -419,3 +425,54 @@ async def _calendar_create(args: dict) -> dict:
         "summary": event.get("summary"),
         "link": event.get("htmlLink", ""),
     }
+
+
+# ── Image Generation (nano-banana via MCP) ──────────────────────────────────
+
+def _call_mcp_tool(name: str, arguments: dict) -> dict:
+    """Route mcp__<server>__<tool> calls to the MCP client."""
+    from tools.mcp_client import call_mcp_tool
+    parts = name.split("__", 2)  # mcp__server__tool
+    if len(parts) != 3:
+        return {"error": f"Invalid MCP tool name: {name}"}
+    _, server, tool = parts
+    result = call_mcp_tool(server.replace("_", "-"), tool, arguments, timeout=120)
+    # Extract text content from MCP response
+    if isinstance(result, dict) and "content" in result:
+        contents = result["content"]
+        if isinstance(contents, list):
+            texts = [c.get("text", "") for c in contents if c.get("type") == "text"]
+            return {"result": "\n".join(texts) if texts else str(contents)}
+    return result
+
+
+async def _generate_image(args: dict) -> dict:
+    """Generate an image using nano-banana MCP server."""
+    from tools.mcp_client import call_mcp_tool
+    prompt = args.get("prompt", "")
+    result = call_mcp_tool("nano-banana", "generate_image", {"prompt": prompt}, timeout=120)
+    # Parse the result to find the file path
+    output = _extract_mcp_text(result)
+    return {"result": output, "prompt": prompt}
+
+
+async def _edit_image(args: dict) -> dict:
+    """Edit an existing image using nano-banana MCP server."""
+    from tools.mcp_client import call_mcp_tool
+    result = call_mcp_tool("nano-banana", "edit_image", {
+        "imagePath": args.get("image_path", ""),
+        "prompt": args.get("prompt", ""),
+    }, timeout=120)
+    output = _extract_mcp_text(result)
+    return {"result": output}
+
+
+def _extract_mcp_text(result: dict) -> str:
+    """Extract text content from MCP response."""
+    if isinstance(result, dict) and "content" in result:
+        contents = result["content"]
+        if isinstance(contents, list):
+            texts = [c.get("text", "") for c in contents if c.get("type") == "text"]
+            if texts:
+                return "\n".join(texts)
+    return str(result)

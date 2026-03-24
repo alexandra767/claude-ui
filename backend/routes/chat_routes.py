@@ -245,6 +245,35 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_image",
+            "description": "Generate an image from a text description using AI (Gemini). Returns the file path of the generated image.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {"type": "string", "description": "Detailed description of the image to generate"},
+                },
+                "required": ["prompt"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "edit_image",
+            "description": "Edit an existing image with AI. Provide the file path and describe the changes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "image_path": {"type": "string", "description": "Full file path to the image to edit"},
+                    "prompt": {"type": "string", "description": "Description of changes to make to the image"},
+                },
+                "required": ["image_path", "prompt"],
+            },
+        },
+    },
 ]
 
 SYSTEM_PROMPT_TEMPLATE = """You are a helpful AI assistant with access to powerful tools. Use them whenever they would help answer the user's question.
@@ -264,6 +293,8 @@ Available tools:
 - **calendar_list**: List upcoming Google Calendar events
 - **calendar_create**: Create calendar events
 - **create_artifact**: Create rich content (code, HTML, SVG, docs) shown in a side panel
+- **generate_image**: Generate images from text descriptions using AI (Gemini)
+- **edit_image**: Edit/modify existing images with AI
 
 Guidelines:
 - Use tools proactively — don't just describe what you could do, actually do it
