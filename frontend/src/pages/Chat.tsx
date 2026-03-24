@@ -6,7 +6,7 @@ import Sidebar from '../components/Sidebar';
 import ChatInput from '../components/ChatInput';
 import MessageBubble from '../components/MessageBubble';
 import ArtifactPanel from '../components/ArtifactPanel';
-import { Menu, Sparkles, Zap, Terminal, Search, Globe, Mail, Calendar, Calculator, Clock, FileCode, Image as ImageIcon } from 'lucide-react';
+import { Menu, Sparkles, Zap, Terminal, Search, Globe, Mail, Calendar, Calculator, Clock, FileCode, Image as ImageIcon, Square, ChevronDown, ChevronRight, Brain } from 'lucide-react';
 import type { Message, Attachment } from '../types';
 
 interface StreamStats {
@@ -48,8 +48,10 @@ export default function Chat() {
   const [liveTps, setLiveTps] = useState(0);
   const [activeTools, setActiveTools] = useState<ActiveTool[]>([]);
   const [isThinking, setIsThinking] = useState(false);
+  const [thinkingContent, setThinkingContent] = useState('');
   const streamStartRef = useRef<number>(0);
   const tokenCountRef = useRef<number>(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const {
     activeConversationId, setActiveConversation, messages, setMessages,
@@ -78,6 +80,19 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key === 'n') { e.preventDefault(); setActiveConversation(null); setMessages([]); navigate('/chat'); }
+      if (mod && e.key === 'k') { e.preventDefault(); document.querySelector<HTMLInputElement>('[placeholder*="Search"]')?.focus(); }
+      if (mod && e.shiftKey && e.key === 'S') { e.preventDefault(); setSidebarOpen(prev => !prev); }
+      if (e.key === 'Escape') { if (showArtifactPanel) useChatStore.getState().setShowArtifactPanel(false); }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
+
   const handleSend = async (text: string, attachments?: Attachment[]) => {
     // Add user message optimistically
     const userMsg: Message = {
@@ -97,6 +112,8 @@ export default function Chat() {
     setLiveTps(0);
     setActiveTools([]);
     setIsThinking(false);
+    setThinkingContent('');
+    abortControllerRef.current = new AbortController();
     streamStartRef.current = Date.now();
     tokenCountRef.current = 0;
 
@@ -116,6 +133,7 @@ export default function Chat() {
       let newConvoId = activeConversationId;
       let artifacts: any[] = [];
       let generatedImages: { filename: string; prompt: string }[] = [];
+      let thinkingText = '';
       let ollamaEvalCount = 0;
       let ollamaEvalDuration = 0;
 
@@ -133,6 +151,8 @@ export default function Chat() {
             switch (data.type) {
               case 'thinking':
                 setIsThinking(true);
+                thinkingText += data.content;
+                setThinkingContent(thinkingText);
                 break;
               case 'token':
                 setIsThinking(false);
@@ -194,6 +214,7 @@ export default function Chat() {
         model: selectedModel,
         artifacts: artifacts.length > 0 ? artifacts : undefined,
         images: generatedImages.length > 0 ? generatedImages : undefined,
+        thinking: thinkingText || undefined,
         created_at: new Date().toISOString(),
       };
       addMessage(assistantMsg);
@@ -206,16 +227,25 @@ export default function Chat() {
         chatApi.listConversations().then(setConversations).catch(() => {});
       }
     } catch (err: any) {
-      addMessage({
-        id: 'err-' + Date.now(),
-        role: 'assistant',
-        content: `Something went wrong: ${err.message}. Make sure the model is running in Ollama.`,
-        created_at: new Date().toISOString(),
-      });
+      if (err.name !== 'AbortError') {
+        addMessage({
+          id: 'err-' + Date.now(),
+          role: 'assistant',
+          content: `Something went wrong: ${err.message}. Make sure the model is running in Ollama.`,
+          created_at: new Date().toISOString(),
+        });
+      }
     } finally {
       setStreaming(false);
       resetStreamContent();
+      abortControllerRef.current = null;
     }
+  };
+
+  const handleStop = () => {
+    abortControllerRef.current?.abort();
+    setStreaming(false);
+    resetStreamContent();
   };
 
   const isEmpty = messages.length === 0 && !isStreaming;
@@ -252,19 +282,9 @@ export default function Chat() {
                 ))}
                 {isStreaming && (
                   <>
-                    {/* Thinking indicator */}
-                    {isThinking && activeTools.length === 0 && !streamingContent && (
-                      <div className="flex items-center gap-3 px-16 py-4">
-                        <div className="flex items-center gap-2 text-sm text-text-secondary">
-                          <Sparkles className="w-4 h-4 text-accent" />
-                          <span>Thinking</span>
-                          <span className="flex gap-0.5 ml-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-accent thinking-dot" />
-                            <span className="w-1.5 h-1.5 rounded-full bg-accent thinking-dot" />
-                            <span className="w-1.5 h-1.5 rounded-full bg-accent thinking-dot" />
-                          </span>
-                        </div>
-                      </div>
+                    {/* Thinking block */}
+                    {isThinking && activeTools.length === 0 && (
+                      <ThinkingBlock content={thinkingContent} isLive />
                     )}
                     {/* Tool activity indicators */}
                     {activeTools.length > 0 && (
@@ -319,6 +339,18 @@ export default function Chat() {
             )}
           </div>
 
+          {/* Stop button */}
+          {isStreaming && (
+            <div className="flex justify-center py-2">
+              <button
+                onClick={handleStop}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl border border-border bg-white text-text-secondary text-sm hover:bg-cream hover:text-text-primary transition"
+              >
+                <Square className="w-3.5 h-3.5 fill-current" /> Stop generating
+              </button>
+            </div>
+          )}
+
           {/* Input */}
           <ChatInput onSend={handleSend} />
         </div>
@@ -359,6 +391,42 @@ function EmptyState({ onSend }: { onSend: (msg: string) => void }) {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ThinkingBlock({ content, isLive }: { content: string; isLive?: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="px-16 py-2">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition"
+      >
+        <Brain className="w-4 h-4 text-accent" />
+        <span className="font-medium">
+          {isLive ? 'Thinking' : 'Thought process'}
+        </span>
+        {isLive && (
+          <span className="flex gap-0.5 ml-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent thinking-dot" />
+            <span className="w-1.5 h-1.5 rounded-full bg-accent thinking-dot" />
+            <span className="w-1.5 h-1.5 rounded-full bg-accent thinking-dot" />
+          </span>
+        )}
+        {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        {!expanded && content && (
+          <span className="text-xs text-text-secondary/60 truncate max-w-[300px]">
+            {content.slice(0, 80)}...
+          </span>
+        )}
+      </button>
+      {expanded && content && (
+        <div className="mt-2 ml-6 pl-3 border-l-2 border-accent/20 text-sm text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[300px] overflow-y-auto">
+          {content}
+        </div>
+      )}
     </div>
   );
 }

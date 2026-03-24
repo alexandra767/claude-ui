@@ -412,6 +412,7 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
         all_artifacts = []
         all_tool_calls = []
         all_images = []
+        all_thinking = ""
         messages = list(ollama_messages)
         max_tool_rounds = 8  # Safety limit
 
@@ -444,6 +445,7 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
 
                                     # Handle thinking tokens (qwen3.5 sends these before tool calls)
                                     if msg.get("thinking"):
+                                        all_thinking += msg["thinking"]
                                         yield f"data: {json.dumps({'type': 'thinking', 'content': msg['thinking']})}\n\n"
 
                                     if msg.get("content"):
@@ -533,6 +535,7 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
                 artifacts=all_artifacts if all_artifacts else None,
                 tool_calls=all_tool_calls if all_tool_calls else None,
                 images=all_images if all_images else None,
+                thinking=all_thinking if all_thinking else None,
             )
             save_db.add(assistant_msg)
 
@@ -639,7 +642,7 @@ def _convo_dict(c: Conversation) -> dict:
 
 
 def _msg_dict(m: Message) -> dict:
-    return {"id": m.id, "role": m.role, "content": m.content, "model": m.model, "artifacts": m.artifacts, "attachments": m.attachments, "images": m.images, "tool_calls": m.tool_calls, "tool_results": m.tool_results, "token_count": m.token_count, "created_at": m.created_at.isoformat() if m.created_at else None}
+    return {"id": m.id, "role": m.role, "content": m.content, "model": m.model, "artifacts": m.artifacts, "attachments": m.attachments, "images": m.images, "thinking": m.thinking, "tool_calls": m.tool_calls, "tool_results": m.tool_results, "token_count": m.token_count, "created_at": m.created_at.isoformat() if m.created_at else None}
 
 
 @asynccontextmanager

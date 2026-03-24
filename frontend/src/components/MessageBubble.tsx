@@ -4,7 +4,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import vscDarkPlus from 'react-syntax-highlighter/dist/esm/styles/prism/vsc-dark-plus';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
-import { Copy, Check, User, Sparkles, ChevronRight, Download, Maximize2 } from 'lucide-react';
+import { Copy, Check, User, Sparkles, ChevronRight, ChevronDown, Download, Maximize2, Brain } from 'lucide-react';
 import { useState } from 'react';
 import type { Message, Artifact } from '../types';
 
@@ -51,6 +51,11 @@ export default function MessageBubble({ message, isStreaming, streamContent }: P
               </div>
             ))}
           </div>
+        )}
+
+        {/* Thinking toggle */}
+        {!isUser && message.thinking && (
+          <ThinkingToggle content={message.thinking} />
         )}
 
         {/* Message content */}
@@ -246,6 +251,27 @@ function ArtifactIcon({ type }: { type: string }) {
     case 'mermaid': return <span className="text-xs font-bold">M</span>;
     default: return <span className="text-xs font-bold">#</span>;
   }
+}
+
+function ThinkingToggle({ content }: { content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mb-2">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition"
+      >
+        <Brain className="w-3.5 h-3.5 text-accent" />
+        <span className="font-medium">Thought process</span>
+        {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+      </button>
+      {expanded && (
+        <div className="mt-1.5 pl-3 border-l-2 border-accent/20 text-xs text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[200px] overflow-y-auto">
+          {content}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function formatSize(bytes: number): string {
