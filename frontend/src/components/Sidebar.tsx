@@ -5,7 +5,7 @@ import { useAuthStore } from '../stores/authStore';
 import { chat } from '../api/client';
 import {
   Plus, Search, MessageSquare, Star, Trash2, Pencil, Check, X,
-  Settings, FolderOpen, LogOut, ChevronDown, Sparkles, Send
+  Settings, FolderOpen, LogOut, ChevronDown, Sparkles, Send, Download, Image
 } from 'lucide-react';
 import type { Conversation } from '../types';
 
@@ -15,6 +15,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
   const { conversations, setConversations, activeConversationId, setActiveConversation, setMessages, removeConversation, updateConversation } = useChatStore();
   const { user, logout } = useAuthStore();
   const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -62,6 +63,27 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
       updateConversation(convo.id, { is_starred: !convo.is_starred });
     } catch {}
   };
+
+  const exportConversation = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const token = localStorage.getItem('token');
+    window.open(`/api/chat/conversations/${id}/export?token=${token}`, '_blank');
+  };
+
+  // Content search with debounce
+  useEffect(() => {
+    if (search.length < 2) { setSearchResults([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/api/chat/search?q=${encodeURIComponent(search)}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) setSearchResults(await res.json());
+      } catch {}
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const startRename = (convo: Conversation, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -146,6 +168,22 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
 
         {/* Conversation list */}
         <div className="flex-1 overflow-y-auto sidebar-scroll px-2 space-y-1">
+          {/* Content search results */}
+          {searchResults.length > 0 && search.length >= 2 && (
+            <div className="mb-3">
+              <div className="px-2 py-1 text-xs font-medium text-text-sidebar-dim uppercase tracking-wider">Search Results</div>
+              {searchResults.map((r: any) => (
+                <div
+                  key={r.message_id}
+                  onClick={() => { navigate(`/chat/${r.conversation_id}`); onClose(); setSearch(''); setSearchResults([]); }}
+                  className="px-2 py-2 rounded-lg cursor-pointer text-sm text-text-sidebar-dim hover:bg-sidebar-hover hover:text-text-sidebar transition"
+                >
+                  <div className="text-text-sidebar truncate text-xs font-medium">{r.conversation_title}</div>
+                  <div className="text-text-sidebar-dim text-xs truncate mt-0.5">{r.snippet.slice(0, 80)}...</div>
+                </div>
+              ))}
+            </div>
+          )}
           {/* Starred */}
           {starred.length > 0 && (
             <div className="mb-3">
@@ -182,6 +220,12 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
             className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${location.pathname === '/share' ? 'bg-sidebar-active text-text-sidebar' : 'text-text-sidebar-dim hover:bg-sidebar-hover hover:text-text-sidebar'}`}
           >
             <Send className="w-4 h-4" /> Share
+          </button>
+          <button
+            onClick={() => { navigate('/gallery'); onClose(); }}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${location.pathname === '/gallery' ? 'bg-sidebar-active text-text-sidebar' : 'text-text-sidebar-dim hover:bg-sidebar-hover hover:text-text-sidebar'}`}
+          >
+            <Image className="w-4 h-4" /> Gallery
           </button>
           <button
             onClick={() => { navigate('/settings'); onClose(); }}
@@ -247,6 +291,7 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
                 <Star className="w-3.5 h-3.5" fill={c.is_starred ? 'currentColor' : 'none'} />
               </button>
               <button onClick={(e) => startRename(c, e)} className="p-0.5 hover:text-text-sidebar"><Pencil className="w-3.5 h-3.5" /></button>
+              <button onClick={(e) => exportConversation(c.id, e)} className="p-0.5 hover:text-text-sidebar" title="Export"><Download className="w-3.5 h-3.5" /></button>
               <button onClick={(e) => deleteConversation(c.id, e)} className="p-0.5 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
             </div>
           </>

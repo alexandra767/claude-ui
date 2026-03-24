@@ -36,6 +36,8 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "drive_search": _drive_search,
         "drive_read_doc": _drive_read_doc,
         "drive_create_doc": _drive_create_doc,
+        "save_note": _save_note,
+        "list_notes": _list_notes,
         "drive_list_files": _drive_list_files,
     }
     handler = handlers.get(name)
@@ -429,6 +431,53 @@ async def _calendar_create(args: dict) -> dict:
         "summary": event.get("summary"),
         "link": event.get("htmlLink", ""),
     }
+
+
+# ── Notes / Memory ──────────────────────────────────────────────────────────
+
+NOTES_DIR = os.path.expanduser("~/claude-ui/notes")
+os.makedirs(NOTES_DIR, exist_ok=True)
+
+
+async def _save_note(args: dict) -> dict:
+    """Save a note/memory. Notes persist across conversations."""
+    title = args.get("title", "untitled")
+    content = args.get("content", "")
+    category = args.get("category", "general")
+
+    # Sanitize filename
+    safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()[:50]
+    filename = f"{safe_title}.md"
+    filepath = os.path.join(NOTES_DIR, filename)
+
+    with open(filepath, "w") as f:
+        f.write(f"# {title}\n\n")
+        f.write(f"*Category: {category} | Saved: {datetime.now().strftime('%Y-%m-%d %H:%M')}*\n\n")
+        f.write(content)
+
+    return {"saved": True, "title": title, "filename": filename, "category": category}
+
+
+async def _list_notes(args: dict) -> dict:
+    """List all saved notes, optionally filtered by search query."""
+    query = args.get("query", "").lower()
+    notes = []
+    for f in sorted(os.listdir(NOTES_DIR)):
+        if not f.endswith(".md"):
+            continue
+        filepath = os.path.join(NOTES_DIR, f)
+        with open(filepath, "r") as fh:
+            content = fh.read()
+        if query and query not in content.lower() and query not in f.lower():
+            continue
+        # Extract title from first line
+        title = content.split("\n")[0].lstrip("# ").strip() if content else f
+        notes.append({
+            "title": title,
+            "filename": f,
+            "preview": content[content.find("\n\n") + 2:][:200] if "\n\n" in content else content[:200],
+        })
+    return {"notes": notes, "count": len(notes)}
 
 
 # ── Google Drive / Docs ─────────────────────────────────────────────────────

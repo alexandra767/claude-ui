@@ -8,6 +8,7 @@ import Settings from './pages/Settings';
 import Projects from './pages/Projects';
 import ProjectDetail from './pages/ProjectDetail';
 import Share from './pages/Share';
+import Gallery from './pages/Gallery';
 import { useTheme } from './hooks/useTheme';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -41,6 +42,7 @@ export default function App() {
       <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
       <Route path="/projects/:projectId" element={<ProtectedRoute><ProjectDetail /></ProtectedRoute>} />
       <Route path="/share" element={<ProtectedRoute><Share /></ProtectedRoute>} />
+      <Route path="/gallery" element={<ProtectedRoute><Gallery /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

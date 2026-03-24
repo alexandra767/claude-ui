@@ -277,6 +277,35 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "save_note",
+            "description": "Save a note or memory that persists across conversations. Use this when the user asks you to remember something.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Note title"},
+                    "content": {"type": "string", "description": "Note content (markdown supported)"},
+                    "category": {"type": "string", "description": "Category (general, todo, reminder, preference)", "default": "general"},
+                },
+                "required": ["title", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_notes",
+            "description": "List and search saved notes/memories from previous conversations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Optional search query to filter notes"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "drive_list_files",
             "description": "List recent files in Google Drive, optionally filtered by name.",
             "parameters": {
@@ -352,6 +381,8 @@ Available tools:
 - **create_artifact**: Create rich content (code, HTML, SVG, docs) shown in a side panel
 - **generate_image**: Generate images from text descriptions using AI (Gemini)
 - **edit_image**: Edit/modify existing images with AI
+- **save_note**: Save a note/memory that persists across conversations
+- **list_notes**: List and search saved notes
 - **drive_list_files**: List recent files in Google Drive
 - **drive_search**: Search Google Drive by content
 - **drive_read_doc**: Read a Google Doc's text content
@@ -464,9 +495,16 @@ async def search_messages(q: str = "", user_id: str = Depends(get_current_user),
 
 
 @router.get("/conversations/{convo_id}/export")
-async def export_conversation(convo_id: str, user_id: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Export conversation as markdown."""
+async def export_conversation(convo_id: str, token: str = "", db: AsyncSession = Depends(get_db)):
+    """Export conversation as markdown. Auth via query param or header."""
     from fastapi.responses import PlainTextResponse
+    from auth import decode_token, get_current_user
+    # Try query param auth first (for direct browser links)
+    if token:
+        payload = decode_token(token)
+        user_id = payload["sub"]
+    else:
+        raise HTTPException(401, "Token required")
     convo = await _get_convo(convo_id, user_id, db)
     result = await db.execute(select(Message).where(Message.conversation_id == convo_id).order_by(Message.created_at))
     messages = result.scalars().all()

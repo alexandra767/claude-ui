@@ -58,6 +58,16 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/api/gallery")
+async def list_gallery():
+    """List all generated images."""
+    images = []
+    for f in sorted(os.listdir(generated_imgs_dir), reverse=True):
+        if f.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            images.append({"name": f, "url": f"/generated/{f}"})
+    return {"images": images}
+
+
 @app.post("/api/location/update")
 async def update_location(data: dict):
     """Receive GPS coordinates from the browser and reverse geocode."""
