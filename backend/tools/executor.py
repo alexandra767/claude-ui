@@ -689,7 +689,7 @@ async def _save_note(args: dict) -> dict:
 
 
 def _save_note_to_drive(title: str, content: str, project: str = "") -> str:
-    """Save note to Google Drive in Claude UI Notes / [Project] folder."""
+    """Save or update note in Google Drive. Finds existing doc by title, or creates new one."""
     from tools.google_auth import get_drive_service, get_docs_service
 
     drive = get_drive_service()
@@ -706,22 +706,34 @@ def _save_note_to_drive(title: str, content: str, project: str = "") -> str:
     else:
         folder_id = root_folder_id
 
-    # Create the Google Doc
-    doc = docs.documents().create(body={"title": title}).execute()
-    doc_id = doc["documentId"]
-
-    # Move doc to the correct folder
-    drive.files().update(
-        fileId=doc_id,
-        addParents=folder_id,
-        removeParents="root",
-        fields="id, parents",
+    # Check if doc already exists with this title in this folder
+    existing = drive.files().list(
+        q=f"name='{title}' and '{folder_id}' in parents and mimeType='application/vnd.google-apps.document' and trashed=false",
+        fields="files(id)",
     ).execute()
 
-    # Add content
-    if content:
-        requests = [{"insertText": {"location": {"index": 1}, "text": content}}]
+    if existing.get("files"):
+        # Update existing doc — clear content and rewrite
+        doc_id = existing["files"][0]["id"]
+        doc = docs.documents().get(documentId=doc_id).execute()
+        # Get document length to clear it
+        end_index = doc.get("body", {}).get("content", [{}])[-1].get("endIndex", 1)
+        requests = []
+        if end_index > 2:
+            requests.append({"deleteContentRange": {"range": {"startIndex": 1, "endIndex": end_index - 1}}})
+        requests.append({"insertText": {"location": {"index": 1}, "text": content}})
         docs.documents().batchUpdate(documentId=doc_id, body={"requests": requests}).execute()
+    else:
+        # Create new doc
+        doc = docs.documents().create(body={"title": title}).execute()
+        doc_id = doc["documentId"]
+        # Move to correct folder
+        drive.files().update(
+            fileId=doc_id, addParents=folder_id, removeParents="root", fields="id",
+        ).execute()
+        if content:
+            requests = [{"insertText": {"location": {"index": 1}, "text": content}}]
+            docs.documents().batchUpdate(documentId=doc_id, body={"requests": requests}).execute()
 
     return f"https://docs.google.com/document/d/{doc_id}/edit"
 

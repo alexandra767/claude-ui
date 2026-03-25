@@ -97,3 +97,12 @@ GigLedger/
 5. Expenses recorded with business % allocation
 6. Schedule C generated with all deductions
 7. Tax packet exported as PDF for accountant/IRS
+
+---
+*Updated: 2026-03-25 06:11*
+
+
+## Official Links
+
+- **Website**: https://gigledger.org/
+- **App Store**: https://apps.apple.com/us/app/gigledger-gig-tax-tracker/id6759967979
