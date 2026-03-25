@@ -278,6 +278,51 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "codebase_tree",
+            "description": "View the file and directory structure of a local project. Use this to understand a project's layout before reading specific files.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Full path to the project directory, e.g. ~/WANDERLINK or ~/claude-ui"},
+                    "max_depth": {"type": "integer", "description": "How deep to scan (default 3)", "default": 3},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "codebase_read",
+            "description": "Read the contents of a specific file from a local project.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Full path to the file to read, e.g. ~/WANDERLINK/Wanderlink/Services/WeatherService.swift"},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "codebase_search",
+            "description": "Search for text/code across all files in a local project directory. Returns matching lines with file paths and line numbers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Full path to the project directory to search"},
+                    "query": {"type": "string", "description": "Text to search for (case-insensitive)"},
+                    "max_results": {"type": "integer", "description": "Max results to return", "default": 20},
+                },
+                "required": ["path", "query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "youtube_transcript",
             "description": "Get the transcript/captions from a YouTube video. Use this to summarize, analyze, or answer questions about YouTube videos.",
             "parameters": {
@@ -396,6 +441,9 @@ Available tools:
 - **create_artifact**: Create rich content (code, HTML, SVG, docs) shown in a side panel
 - **generate_image**: Generate images from text descriptions using AI (Gemini)
 - **edit_image**: Edit/modify existing images with AI
+- **codebase_tree**: View the file structure of a local project directory
+- **codebase_read**: Read any file from a local project
+- **codebase_search**: Search for text across all files in a project
 - **youtube_transcript**: Get transcript/captions from a YouTube video for summarization
 - **save_note**: Save a note/memory that persists across conversations
 - **list_notes**: List and search saved notes
