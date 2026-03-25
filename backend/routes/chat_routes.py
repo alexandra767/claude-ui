@@ -660,8 +660,13 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
     if req.project_id:
         proj_result = await db.execute(select(Project).where(Project.id == req.project_id))
         project = proj_result.scalar_one_or_none()
-        if project and project.system_prompt:
-            system += f"\n\nProject instructions: {project.system_prompt}"
+        if project:
+            if project.system_prompt:
+                system += f"\n\nProject instructions: {project.system_prompt}"
+            # Auto-load all notes for this project
+            project_notes = _load_project_notes(project.name)
+            if project_notes:
+                system += f"\n\nProject knowledge (from saved notes):\n{project_notes}"
 
     ollama_messages = [{"role": "system", "content": system}]
     for m in all_msgs:
@@ -893,6 +898,36 @@ def _resize_image_for_vision(filepath: str, max_size: int = 1024) -> str:
             return base64.b64encode(data).decode('utf-8')
         except Exception:
             return ""
+
+
+def _load_project_notes(project_name: str) -> str:
+    """Load all notes for a project and return as combined text."""
+    notes_dir = os.path.expanduser("~/claude-ui/notes")
+    combined = ""
+
+    # Check project subfolder
+    project_dir = os.path.join(notes_dir, project_name)
+    if os.path.isdir(project_dir):
+        for f in sorted(os.listdir(project_dir)):
+            if f.endswith(".md"):
+                filepath = os.path.join(project_dir, f)
+                with open(filepath, "r") as fh:
+                    content = fh.read()
+                combined += f"\n--- {f} ---\n{content}\n"
+
+    # Also check root notes dir for notes matching project name
+    for f in sorted(os.listdir(notes_dir)):
+        if f.endswith(".md") and project_name.lower() in f.lower():
+            filepath = os.path.join(notes_dir, f)
+            with open(filepath, "r") as fh:
+                content = fh.read()
+            combined += f"\n--- {f} ---\n{content}\n"
+
+    # Truncate if too long (keep under 10k chars to leave room for conversation)
+    if len(combined) > 10000:
+        combined = combined[:10000] + "\n\n...(notes truncated)"
+
+    return combined.strip()
 
 
 def _read_file_content(filepath: str, filename: str) -> str:
