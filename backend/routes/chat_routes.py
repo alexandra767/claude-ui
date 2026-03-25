@@ -323,6 +323,22 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "tutor_validate_dynamic",
+            "description": "Validate user code against custom test cases you generate. Use this for AI-generated challenges when built-in challenges are exhausted.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "The user's code solution"},
+                    "test_code": {"type": "string", "description": "Test code with assertions that prints 'All tests passed!' on success"},
+                    "language": {"type": "string", "enum": ["python", "javascript"], "default": "python"},
+                },
+                "required": ["code", "test_code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "tutor_progress",
             "description": "Show the user's coding tutorial progress — completed challenges, total available, and percentage.",
             "parameters": {"type": "object", "properties": {}},
@@ -527,7 +543,9 @@ Available tools:
 - **tutor_topics**: List coding challenge topics (Python, OOP, Data Structures, JS, Swift)
 - **tutor_challenge**: Get a coding challenge to solve
 - **tutor_validate**: Test the user's code against challenge test cases
+- **tutor_validate_dynamic**: Test code against custom test cases you generate (for unlimited challenges)
 - **tutor_progress**: Show learning progress and completed challenges
+When the user asks for a challenge and you've run out of built-in ones, generate a new challenge yourself with test code and use tutor_validate_dynamic to check their solution.
 - **codebase_tree**: View the file structure of a local project directory
 - **codebase_read**: Read any file from a local project
 - **codebase_search**: Search for text across all files in a project

@@ -44,6 +44,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "tutor_topics": _tutor_topics,
         "tutor_challenge": _tutor_challenge,
         "tutor_validate": _tutor_validate,
+        "tutor_validate_dynamic": _tutor_validate_dynamic,
         "tutor_progress": _tutor_progress,
         "codebase_tree": _codebase_tree,
         "codebase_read": _codebase_read,
@@ -471,6 +472,16 @@ async def _tutor_validate(args: dict) -> dict:
     progress = save_progress(topic, challenge_id, result.get("passed", False))
     result["progress"] = progress
     return result
+
+async def _tutor_validate_dynamic(args: dict) -> dict:
+    """Validate code against AI-generated test cases (for dynamic challenges)."""
+    from tools.code_tutor import validate_dynamic_challenge
+    code = args.get("code", "")
+    test_code = args.get("test_code", "")
+    language = args.get("language", "python")
+    if not code or not test_code:
+        return {"error": "code and test_code are required"}
+    return validate_dynamic_challenge(code, test_code, language)
 
 async def _tutor_progress(args: dict) -> dict:
     from tools.code_tutor import get_progress
