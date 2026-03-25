@@ -1,5 +1,15 @@
-import { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Paperclip, X, Globe, Code, FileText } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { ArrowUp, Paperclip, X, Globe, Code, FileText, ChevronDown } from 'lucide-react';
+import Editor from 'react-simple-code-editor';
+import Prism from 'prismjs';
+import 'prismjs/components/prism-python';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-swift';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-css';
+import 'prismjs/themes/prism-tomorrow.css';
 import { useChatStore } from '../stores/chatStore';
 import { files } from '../api/client';
 import type { Attachment } from '../types';
@@ -11,10 +21,19 @@ interface Props {
 
 export default function ChatInput({ onSend, disabled }: Props) {
   const [text, setText] = useState('');
+  const [codeMode, setCodeMode] = useState(false);
+  const [codeLang, setCodeLang] = useState('python');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const LANGUAGES = ['python', 'javascript', 'typescript', 'swift', 'bash', 'json', 'css'];
+
+  const highlightCode = useCallback((code: string) => {
+    const grammar = Prism.languages[codeLang] || Prism.languages.python;
+    return Prism.highlight(code, grammar, codeLang);
+  }, [codeLang]);
   const isStreaming = useChatStore((s) => s.isStreaming);
 
   useEffect(() => {
@@ -24,7 +43,9 @@ export default function ChatInput({ onSend, disabled }: Props) {
   const handleSubmit = () => {
     if (!text.trim() && attachments.length === 0) return;
     if (disabled || isStreaming) return;
-    onSend(text.trim(), attachments.length > 0 ? attachments : undefined);
+    // Wrap code in markdown code block when in code mode
+    const message = codeMode && text.trim() ? `\`\`\`${codeLang}\n${text.trim()}\n\`\`\`` : text.trim();
+    onSend(message, attachments.length > 0 ? attachments : undefined);
     setText('');
     setAttachments([]);
     // Reset textarea height
@@ -123,18 +144,59 @@ export default function ChatInput({ onSend, disabled }: Props) {
               onChange={handleFileUpload}
               className="hidden"
             />
+            <button
+              onClick={() => setCodeMode(!codeMode)}
+              className={`p-2 rounded-lg transition ${codeMode ? 'text-accent bg-accent/10' : 'text-text-secondary hover:text-text-primary hover:bg-cream'}`}
+              title={codeMode ? 'Switch to text' : 'Switch to code editor'}
+            >
+              <Code className="w-5 h-5" />
+            </button>
           </div>
 
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={(e) => { setText(e.target.value); handleInput(); }}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            placeholder="Message..."
-            rows={1}
-            className="flex-1 resize-none bg-transparent text-text-primary placeholder:text-text-secondary/60 focus:outline-none text-[16px] leading-6 py-2 max-h-[200px]"
-          />
+          {codeMode ? (
+            <div className="flex-1 rounded-lg bg-[#1e1e1e] overflow-hidden max-h-[300px] overflow-y-auto">
+              {/* Language selector */}
+              <div className="flex items-center justify-between px-3 py-1 bg-[#2d2d2d] text-[#999] text-xs">
+                <select
+                  value={codeLang}
+                  onChange={(e) => setCodeLang(e.target.value)}
+                  className="bg-transparent text-[#ccc] text-xs focus:outline-none cursor-pointer"
+                >
+                  {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+                <span className="text-[#666]">Code Mode</span>
+              </div>
+              <Editor
+                value={text}
+                onValueChange={setText}
+                highlight={highlightCode}
+                padding={12}
+                onKeyDown={(e: React.KeyboardEvent) => {
+                  if (e.key === 'Enter' && !e.shiftKey && e.metaKey) { e.preventDefault(); handleSubmit(); }
+                }}
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '14px',
+                  lineHeight: '1.6',
+                  minHeight: '60px',
+                  color: '#d4d4d4',
+                }}
+                placeholder="Write your code here..."
+                textareaClassName="code-editor-textarea"
+              />
+            </div>
+          ) : (
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={(e) => { setText(e.target.value); handleInput(); }}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              placeholder="Message..."
+              rows={1}
+              className="flex-1 resize-none bg-transparent text-text-primary placeholder:text-text-secondary/60 focus:outline-none text-[16px] leading-6 py-2 max-h-[200px]"
+            />
+          )}
 
           <button
             onClick={handleSubmit}
