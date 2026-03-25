@@ -589,13 +589,12 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
                 filepath = att.get("path", "")
                 filename = att.get("filename", "")
                 mime = att.get("type", "")
-                # Image attachments → send as vision input
+                # Image attachments → resize and send as vision input
                 if mime.startswith("image/") or filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
                     if filepath and os.path.exists(filepath):
-                        import base64
-                        with open(filepath, "rb") as img_f:
-                            img_b64 = base64.b64encode(img_f.read()).decode("utf-8")
-                        msg_images.append(img_b64)
+                        img_b64 = _resize_image_for_vision(filepath)
+                        if img_b64:
+                            msg_images.append(img_b64)
                 else:
                     # Text/PDF attachments → read content
                     file_text = _read_file_content(filepath, filename)
@@ -780,6 +779,37 @@ async def tools_status():
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
+
+def _resize_image_for_vision(filepath: str, max_size: int = 1024) -> str:
+    """Resize image and convert to base64 for vision model. Keeps under ~1MB."""
+    import base64
+    from io import BytesIO
+    try:
+        from PIL import Image
+        img = Image.open(filepath)
+        # Convert RGBA to RGB
+        if img.mode in ('RGBA', 'P'):
+            img = img.convert('RGB')
+        # Resize if too large
+        w, h = img.size
+        if w > max_size or h > max_size:
+            ratio = min(max_size / w, max_size / h)
+            img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+        # Save to buffer as JPEG (smaller than PNG)
+        buf = BytesIO()
+        img.save(buf, format='JPEG', quality=85)
+        return base64.b64encode(buf.getvalue()).decode('utf-8')
+    except Exception:
+        # Fallback: read raw file
+        try:
+            with open(filepath, 'rb') as f:
+                data = f.read()
+            if len(data) > 5 * 1024 * 1024:  # Skip files over 5MB
+                return ""
+            return base64.b64encode(data).decode('utf-8')
+        except Exception:
+            return ""
+
 
 def _read_file_content(filepath: str, filename: str) -> str:
     """Read file content, supporting PDF, text, code, and common formats."""
