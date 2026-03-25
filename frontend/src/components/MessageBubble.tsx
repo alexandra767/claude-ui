@@ -4,7 +4,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import vscDarkPlus from 'react-syntax-highlighter/dist/esm/styles/prism/vsc-dark-plus';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
-import { Copy, Check, User, Sparkles, ChevronRight, ChevronDown, Download, Maximize2, Brain, Pencil, RefreshCw } from 'lucide-react';
+import { Copy, Check, User, Sparkles, ChevronRight, ChevronDown, Download, Maximize2, Brain, Pencil, RefreshCw, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useState } from 'react';
 import type { Message, Artifact } from '../types';
 
@@ -157,20 +157,9 @@ export default function MessageBubble({ message, isStreaming, streamContent, onE
           </div>
         )}
 
-        {/* Edit / Regenerate buttons */}
+        {/* Action buttons */}
         {!isStreaming && (
-          <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition">
-            {isUser && onEdit && (
-              <button onClick={() => onEdit(message)} className="p-1 rounded text-text-secondary/50 hover:text-text-primary transition" title="Edit">
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-            )}
-            {!isUser && onRegenerate && (
-              <button onClick={() => onRegenerate(message)} className="p-1 rounded text-text-secondary/50 hover:text-text-primary transition" title="Regenerate">
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+          <MessageActions message={message} isUser={isUser} onEdit={onEdit} onRegenerate={onRegenerate} />
         )}
       </div>
     </div>
@@ -290,6 +279,61 @@ function ThinkingToggle({ content }: { content: string }) {
         <div className="mt-1.5 pl-3 border-l-2 border-accent/20 text-xs text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[200px] overflow-y-auto">
           {content}
         </div>
+      )}
+    </div>
+  );
+}
+
+function MessageActions({ message, isUser, onEdit, onRegenerate }: {
+  message: Message; isUser: boolean;
+  onEdit?: (m: Message) => void; onRegenerate?: (m: Message) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [reaction, setReaction] = useState<'up' | 'down' | null>(null);
+
+  const copyResponse = () => {
+    navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const react = async (type: 'up' | 'down') => {
+    const newReaction = reaction === type ? null : type;
+    setReaction(newReaction);
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`/api/chat/messages/${message.id}/reaction`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ reaction: newReaction }),
+      });
+    } catch {}
+  };
+
+  return (
+    <div className="flex items-center gap-0.5 mt-2 sm:opacity-0 sm:group-hover:opacity-100 transition">
+      {isUser && onEdit && (
+        <button onClick={() => onEdit(message)} className="p-1 rounded text-text-secondary/50 hover:text-text-primary transition" title="Edit">
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      )}
+      {!isUser && (
+        <>
+          {onRegenerate && (
+            <button onClick={() => onRegenerate(message)} className="p-1 rounded text-text-secondary/50 hover:text-text-primary transition" title="Regenerate">
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <button onClick={copyResponse} className="p-1 rounded text-text-secondary/50 hover:text-text-primary transition" title="Copy response">
+            {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+          <button onClick={() => react('up')} className={`p-1 rounded transition ${reaction === 'up' ? 'text-green-500' : 'text-text-secondary/50 hover:text-text-primary'}`} title="Good response">
+            <ThumbsUp className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => react('down')} className={`p-1 rounded transition ${reaction === 'down' ? 'text-red-500' : 'text-text-secondary/50 hover:text-text-primary'}`} title="Bad response">
+            <ThumbsDown className="w-3.5 h-3.5" />
+          </button>
+        </>
       )}
     </div>
   );

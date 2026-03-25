@@ -50,6 +50,8 @@ export default function Chat() {
   const [liveTps, setLiveTps] = useState(0);
   const [activeTools, setActiveTools] = useState<ActiveTool[]>([]);
   const [isThinking, setIsThinking] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<any[]>([]);
   const [thinkingContent, setThinkingContent] = useState('');
   const streamStartRef = useRef<number>(0);
   const tokenCountRef = useRef<number>(0);
@@ -58,7 +60,7 @@ export default function Chat() {
   const {
     activeConversationId, setActiveConversation, messages, setMessages,
     addMessage, isStreaming, setStreaming, streamingContent,
-    appendStreamContent, resetStreamContent, selectedModel,
+    appendStreamContent, resetStreamContent, selectedModel, selectedPersona,
     showArtifactPanel, setConversations,
   } = useChatStore();
 
@@ -141,6 +143,7 @@ export default function Chat() {
         message: text,
         model: selectedModel,
         project_id: projectId,
+        persona: selectedPersona !== 'default' ? selectedPersona : undefined,
         attachments,
       });
 
@@ -335,8 +338,23 @@ export default function Chat() {
             )}
           </div>
 
-          {/* Messages area */}
-          <div className="flex-1 overflow-y-auto">
+          {/* Messages area — supports drag-drop files */}
+          <div
+            className={`flex-1 overflow-y-auto ${dragOver ? 'ring-2 ring-accent ring-inset bg-accent/5' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={async (e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const { files: fileApi } = await import('../api/client');
+              for (const file of Array.from(e.dataTransfer.files)) {
+                try {
+                  const result = await fileApi.upload(file);
+                  setPendingAttachments(prev => [...prev, result]);
+                } catch {}
+              }
+            }}
+          >
             {isEmpty ? (
               <EmptyState onSend={handleSend} />
             ) : (

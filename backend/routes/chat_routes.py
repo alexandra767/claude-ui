@@ -505,6 +505,7 @@ class SendMessageRequest(BaseModel):
     message: str
     model: str = "qwen3.5:122b"
     project_id: str | None = None
+    persona: str | None = None
     attachments: list[dict] | None = None
 
 
@@ -565,6 +566,18 @@ async def delete_messages_from(convo_id: str, msg_id: str, user_id: str = Depend
     )
     for m in result.scalars().all():
         await db.delete(m)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.put("/messages/{msg_id}/reaction")
+async def set_reaction(msg_id: str, data: dict, user_id: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Set thumbs up/down reaction on a message."""
+    result = await db.execute(select(Message).where(Message.id == msg_id))
+    msg = result.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(404, "Message not found")
+    msg.reaction = data.get("reaction")  # 'up', 'down', or None
     await db.commit()
     return {"ok": True}
 
@@ -651,6 +664,12 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
         timezone=tz,
         datetime_now=datetime.now().strftime("%A, %B %d, %Y %I:%M %p"),
     )
+    # Add persona if specified
+    if req.persona:
+        persona_prompt = _get_persona_prompt(req.persona)
+        if persona_prompt:
+            system += f"\n\nPersona: {persona_prompt}"
+
     # Add custom instructions from user profile
     user_result = await db.execute(select(User).where(User.id == user_id))
     user_obj = user_result.scalar_one_or_none()
@@ -898,6 +917,20 @@ def _resize_image_for_vision(filepath: str, max_size: int = 1024) -> str:
             return base64.b64encode(data).decode('utf-8')
         except Exception:
             return ""
+
+
+def _get_persona_prompt(persona_id: str) -> str:
+    """Get persona system prompt by ID."""
+    try:
+        personas_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tools", "personas.json")
+        with open(personas_path) as f:
+            personas = json.load(f)
+        for p in personas:
+            if p["id"] == persona_id:
+                return p.get("prompt", "")
+    except Exception:
+        pass
+    return ""
 
 
 def _load_project_notes(project_name: str) -> str:

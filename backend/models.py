@@ -52,6 +52,7 @@ class Message(Base):
     attachments = Column(JSON, nullable=True)  # [{filename, path, type, size}]
     images = Column(JSON, nullable=True)  # [{filename, prompt}]
     thinking = Column(Text, nullable=True)  # model's reasoning/thinking content
+    reaction = Column(String, nullable=True)  # 'up', 'down', or null
     token_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     conversation = relationship("Conversation", back_populates="messages")

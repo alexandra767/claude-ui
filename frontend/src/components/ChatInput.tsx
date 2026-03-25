@@ -54,6 +54,25 @@ export default function ChatInput({ onSend, disabled }: Props) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Paste images directly (Cmd+V)
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items;
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        setUploading(true);
+        try {
+          const result = await files.upload(file);
+          setAttachments((prev) => [...prev, result]);
+        } catch {}
+        setUploading(false);
+        return;
+      }
+    }
+  };
+
   const removeAttachment = (idx: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== idx));
   };
@@ -111,6 +130,7 @@ export default function ChatInput({ onSend, disabled }: Props) {
             value={text}
             onChange={(e) => { setText(e.target.value); handleInput(); }}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder="Message..."
             rows={1}
             className="flex-1 resize-none bg-transparent text-text-primary placeholder:text-text-secondary/60 focus:outline-none text-[16px] leading-6 py-2 max-h-[200px]"

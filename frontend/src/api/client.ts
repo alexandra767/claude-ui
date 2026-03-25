@@ -57,6 +57,7 @@ export const chat = {
     message: string;
     model?: string;
     project_id?: string;
+    persona?: string;
     attachments?: any[];
   }) => {
     return fetch(`${API_BASE}/chat/send`, {

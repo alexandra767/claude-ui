@@ -58,6 +58,15 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/api/personas")
+async def list_personas():
+    """List available AI personas."""
+    import json as _json
+    personas_path = os.path.join(os.path.dirname(__file__), "tools", "personas.json")
+    with open(personas_path) as f:
+        return _json.load(f)
+
+
 @app.get("/api/gallery")
 async def list_gallery():
     """List all generated images."""

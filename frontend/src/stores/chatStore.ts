@@ -14,6 +14,7 @@ interface ChatState {
   isStreaming: boolean;
   streamingContent: string;
   selectedModel: string;
+  selectedPersona: string;
   activeArtifact: Artifact | null;
   showArtifactPanel: boolean;
   userLocation: UserLocation | null;
@@ -26,6 +27,7 @@ interface ChatState {
   appendStreamContent: (chunk: string) => void;
   resetStreamContent: () => void;
   setSelectedModel: (model: string) => void;
+  setSelectedPersona: (persona: string) => void;
   setActiveArtifact: (artifact: Artifact | null) => void;
   setShowArtifactPanel: (v: boolean) => void;
   removeConversation: (id: string) => void;
@@ -41,6 +43,7 @@ export const useChatStore = create<ChatState>((set) => ({
   isStreaming: false,
   streamingContent: '',
   selectedModel: 'qwen3.5:122b',
+  selectedPersona: 'default',
   activeArtifact: null,
   showArtifactPanel: false,
   userLocation: null,
@@ -53,6 +56,7 @@ export const useChatStore = create<ChatState>((set) => ({
   appendStreamContent: (chunk) => set((s) => ({ streamingContent: s.streamingContent + chunk })),
   resetStreamContent: () => set({ streamingContent: '' }),
   setSelectedModel: (selectedModel) => set({ selectedModel }),
+  setSelectedPersona: (selectedPersona) => set({ selectedPersona }),
   setActiveArtifact: (activeArtifact) => set({ activeArtifact, showArtifactPanel: !!activeArtifact }),
   setShowArtifactPanel: (showArtifactPanel) => set({ showArtifactPanel }),
   removeConversation: (id) => set((s) => ({
