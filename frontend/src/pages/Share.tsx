@@ -278,7 +278,7 @@ export default function Share() {
                             {item.content}
                           </a>
                         ) : (
-                          item.content.length > 500 ? item.content.slice(0, 500) + '...' : item.content
+                          item.content
                         )}
                       </div>
                     )}
@@ -318,7 +318,7 @@ export default function Share() {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition shrink-0">
+                  <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition shrink-0">
                     {(item.type === 'text' || item.type === 'link') && (
                       <button onClick={() => copyContent(item)} className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-cream transition" title="Copy">
                         {copiedId === item.id ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}

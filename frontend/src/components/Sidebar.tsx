@@ -104,8 +104,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
   const filtered = conversations.filter((c) =>
     c.title.toLowerCase().includes(search.toLowerCase())
   );
-  const starred = filtered.filter((c) => c.is_starred);
-  const recent = filtered.filter((c) => !c.is_starred);
+  const starred = filtered.filter((c) => c.is_starred && !c.project_id);
+  const projectChats = filtered.filter((c) => c.project_id);
+  const recent = filtered.filter((c) => !c.is_starred && !c.project_id);
 
   // Group recent by date
   const today = new Date();
@@ -199,6 +200,16 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
               {g.items.map((c) => renderConvoItem(c))}
             </div>
           ))}
+
+          {/* Project chats */}
+          {projectChats.length > 0 && (
+            <div className="mb-3 mt-2 pt-2 border-t border-border-dark">
+              <div className="px-2 py-1 text-xs font-medium text-accent/70 uppercase tracking-wider flex items-center gap-1.5">
+                <FolderOpen className="w-3 h-3" /> Projects
+              </div>
+              {projectChats.map((c) => renderConvoItem(c))}
+            </div>
+          )}
 
           {filtered.length === 0 && (
             <div className="px-3 py-8 text-center text-text-sidebar-dim text-sm">

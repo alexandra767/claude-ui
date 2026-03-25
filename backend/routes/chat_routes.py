@@ -338,15 +338,45 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "save_note",
-            "description": "Save a note or memory that persists across conversations. Use this when the user asks you to remember something.",
+            "description": "Save a note or memory that persists across conversations. Also saves to Google Drive. Use this when the user asks you to remember something.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "title": {"type": "string", "description": "Note title"},
                     "content": {"type": "string", "description": "Note content (markdown supported)"},
                     "category": {"type": "string", "description": "Category (general, todo, reminder, preference)", "default": "general"},
+                    "project": {"type": "string", "description": "Project name for organizing (e.g. 'GigLedger', 'WanderLink'). Creates a subfolder."},
                 },
                 "required": ["title", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_note",
+            "description": "Read the full content of a saved note. Use list_notes first to find the filename.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {"type": "string", "description": "The note filename (e.g. 'GigLedger Project Overview.md')"},
+                },
+                "required": ["filename"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_note",
+            "description": "Append new content to an existing note without losing existing data. Use list_notes first to find the filename.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {"type": "string", "description": "The note filename (e.g. 'GigLedger Project Overview.md')"},
+                    "content": {"type": "string", "description": "New content to append to the note"},
+                },
+                "required": ["filename", "content"],
             },
         },
     },
@@ -445,7 +475,9 @@ Available tools:
 - **codebase_read**: Read any file from a local project
 - **codebase_search**: Search for text across all files in a project
 - **youtube_transcript**: Get transcript/captions from a YouTube video for summarization
-- **save_note**: Save a note/memory that persists across conversations
+- **save_note**: Save a new note/memory that persists across conversations
+- **read_note**: Read the full content of a saved note
+- **update_note**: Append to an existing note without losing data
 - **list_notes**: List and search saved notes
 - **drive_list_files**: List recent files in Google Drive
 - **drive_search**: Search Google Drive by content
@@ -454,9 +486,13 @@ Available tools:
 
 Guidelines:
 - Use tools proactively — don't just describe what you could do, actually do it
+- When the user asks "what do you know about X" or "tell me about X" — ALWAYS check list_notes first before searching the web. Your notes contain information from previous conversations.
+- When the user says "remember X" or "save this" — use save_note to persist it
+- When the user says "update my note about X" — use list_notes to find it, then update_note to append
 - For math, use the calculator tool instead of computing in your head
 - For current events, dates, weather — use the appropriate tool
 - For code demonstrations, use execute_code to actually run it and show output
+- For local projects on the Spark, use codebase_tree/codebase_read/codebase_search to explore them
 - Create artifacts for substantial standalone content the user might want to keep
 - For short inline code examples, use regular markdown code blocks
 - Always format responses with clear markdown
