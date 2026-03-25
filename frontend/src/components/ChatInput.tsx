@@ -1,15 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowUp, Paperclip, X, Globe, Code, FileText, ChevronDown } from 'lucide-react';
-import Editor from 'react-simple-code-editor';
-import Prism from 'prismjs';
-import 'prismjs/components/prism-python';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-typescript';
-import 'prismjs/components/prism-swift';
-import 'prismjs/components/prism-bash';
-import 'prismjs/components/prism-json';
-import 'prismjs/components/prism-css';
-import 'prismjs/themes/prism-tomorrow.css';
+import { useState, useRef, useEffect } from 'react';
+import { ArrowUp, Paperclip, X, Globe, Code, FileText } from 'lucide-react';
 import { useChatStore } from '../stores/chatStore';
 import { files } from '../api/client';
 import type { Attachment } from '../types';
@@ -29,11 +19,6 @@ export default function ChatInput({ onSend, disabled }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const LANGUAGES = ['python', 'javascript', 'typescript', 'swift', 'bash', 'json', 'css'];
-
-  const highlightCode = useCallback((code: string) => {
-    const grammar = Prism.languages[codeLang] || Prism.languages.python;
-    return Prism.highlight(code, grammar, codeLang);
-  }, [codeLang]);
   const isStreaming = useChatStore((s) => s.isStreaming);
 
   useEffect(() => {
@@ -154,9 +139,9 @@ export default function ChatInput({ onSend, disabled }: Props) {
           </div>
 
           {codeMode ? (
-            <div className="flex-1 rounded-lg bg-[#1e1e1e] overflow-hidden max-h-[300px] overflow-y-auto">
+            <div className="flex-1 rounded-lg bg-[#1e1e1e] overflow-hidden max-h-[300px]">
               {/* Language selector */}
-              <div className="flex items-center justify-between px-3 py-1 bg-[#2d2d2d] text-[#999] text-xs">
+              <div className="flex items-center justify-between px-3 py-1.5 bg-[#2d2d2d] text-[#999] text-xs">
                 <select
                   value={codeLang}
                   onChange={(e) => setCodeLang(e.target.value)}
@@ -164,25 +149,22 @@ export default function ChatInput({ onSend, disabled }: Props) {
                 >
                   {LANGUAGES.map(l => <option key={l} value={l}>{l}</option>)}
                 </select>
-                <span className="text-[#666]">Code Mode</span>
+                <span className="text-[#666]">Cmd+Enter to send</span>
               </div>
-              <Editor
+              <textarea
                 value={text}
-                onValueChange={setText}
-                highlight={highlightCode}
-                padding={12}
-                onKeyDown={(e: React.KeyboardEvent) => {
-                  if (e.key === 'Enter' && !e.shiftKey && e.metaKey) { e.preventDefault(); handleSubmit(); }
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab') { e.preventDefault(); const s = e.currentTarget.selectionStart; setText(text.slice(0, s) + '    ' + text.slice(s)); setTimeout(() => { e.currentTarget.selectionStart = e.currentTarget.selectionEnd = s + 4; }, 0); }
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); handleSubmit(); }
                 }}
-                style={{
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: '14px',
-                  lineHeight: '1.6',
-                  minHeight: '60px',
-                  color: '#d4d4d4',
-                }}
+                onPaste={handlePaste}
                 placeholder="Write your code here..."
-                textareaClassName="code-editor-textarea"
+                rows={4}
+                className="w-full resize-none bg-transparent text-[#d4d4d4] placeholder:text-[#555] focus:outline-none p-3 text-sm leading-6 max-h-[250px] overflow-y-auto"
+                style={{ fontFamily: 'var(--font-mono)' }}
+                spellCheck={false}
+                autoFocus
               />
             </div>
           ) : (
