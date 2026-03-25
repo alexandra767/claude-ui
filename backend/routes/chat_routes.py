@@ -13,6 +13,7 @@ from database import async_session as _async_session
 import httpx
 import json
 import re
+import os
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -581,13 +582,29 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
     ollama_messages = [{"role": "system", "content": system}]
     for m in all_msgs:
         msg_content = m.content
-        # If message has attachments, read file contents and append
+        msg_images = []
+        # If message has attachments, handle images and text files
         if m.attachments:
             for att in m.attachments:
-                file_text = _read_file_content(att.get("path", ""), att.get("filename", ""))
-                if file_text:
-                    msg_content += f"\n\n--- Attached file: {att.get('filename', 'file')} ---\n{file_text}\n--- End of file ---"
-        ollama_messages.append({"role": m.role, "content": msg_content})
+                filepath = att.get("path", "")
+                filename = att.get("filename", "")
+                mime = att.get("type", "")
+                # Image attachments → send as vision input
+                if mime.startswith("image/") or filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                    if filepath and os.path.exists(filepath):
+                        import base64
+                        with open(filepath, "rb") as img_f:
+                            img_b64 = base64.b64encode(img_f.read()).decode("utf-8")
+                        msg_images.append(img_b64)
+                else:
+                    # Text/PDF attachments → read content
+                    file_text = _read_file_content(filepath, filename)
+                    if file_text:
+                        msg_content += f"\n\n--- Attached file: {filename} ---\n{file_text}\n--- End of file ---"
+        msg_entry = {"role": m.role, "content": msg_content}
+        if msg_images:
+            msg_entry["images"] = msg_images
+        ollama_messages.append(msg_entry)
 
     convo.updated_at = datetime.now(timezone.utc)
     await db.commit()
