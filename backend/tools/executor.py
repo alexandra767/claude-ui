@@ -38,6 +38,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "drive_create_doc": _drive_create_doc,
         "save_note": _save_note,
         "list_notes": _list_notes,
+        "youtube_transcript": _youtube_transcript,
         "drive_list_files": _drive_list_files,
     }
     handler = handlers.get(name)
@@ -431,6 +432,54 @@ async def _calendar_create(args: dict) -> dict:
         "summary": event.get("summary"),
         "link": event.get("htmlLink", ""),
     }
+
+
+# ── YouTube Transcript ──────────────────────────────────────────────────────
+
+async def _youtube_transcript(args: dict) -> dict:
+    """Get transcript/captions from a YouTube video."""
+    from youtube_transcript_api import YouTubeTranscriptApi
+    import re as _re
+
+    url = args.get("url", "")
+    # Extract video ID from various URL formats
+    video_id = ""
+    patterns = [
+        r'(?:v=|/v/|youtu\.be/)([a-zA-Z0-9_-]{11})',
+        r'^([a-zA-Z0-9_-]{11})$',
+    ]
+    for p in patterns:
+        m = _re.search(p, url)
+        if m:
+            video_id = m.group(1)
+            break
+
+    if not video_id:
+        return {"error": f"Could not extract video ID from: {url}"}
+
+    try:
+        ytt_api = YouTubeTranscriptApi()
+        transcript = ytt_api.fetch(video_id)
+
+        # Combine all text segments
+        full_text = ""
+        for segment in transcript.snippets:
+            full_text += segment.text + " "
+
+        full_text = full_text.strip()
+
+        # Truncate if very long
+        if len(full_text) > 15000:
+            full_text = full_text[:15000] + "\n\n...(truncated)"
+
+        return {
+            "video_id": video_id,
+            "transcript": full_text,
+            "word_count": len(full_text.split()),
+            "url": f"https://youtube.com/watch?v={video_id}",
+        }
+    except Exception as e:
+        return {"error": f"Could not get transcript: {str(e)}. The video may not have captions available."}
 
 
 # ── Notes / Memory ──────────────────────────────────────────────────────────

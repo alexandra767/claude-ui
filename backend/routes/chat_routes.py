@@ -277,6 +277,20 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "youtube_transcript",
+            "description": "Get the transcript/captions from a YouTube video. Use this to summarize, analyze, or answer questions about YouTube videos.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "YouTube video URL or video ID"},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "save_note",
             "description": "Save a note or memory that persists across conversations. Use this when the user asks you to remember something.",
             "parameters": {
@@ -381,6 +395,7 @@ Available tools:
 - **create_artifact**: Create rich content (code, HTML, SVG, docs) shown in a side panel
 - **generate_image**: Generate images from text descriptions using AI (Gemini)
 - **edit_image**: Edit/modify existing images with AI
+- **youtube_transcript**: Get transcript/captions from a YouTube video for summarization
 - **save_note**: Save a note/memory that persists across conversations
 - **list_notes**: List and search saved notes
 - **drive_list_files**: List recent files in Google Drive
