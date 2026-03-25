@@ -41,6 +41,10 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "read_note": _read_note,
         "list_notes": _list_notes,
         "youtube_transcript": _youtube_transcript,
+        "tutor_topics": _tutor_topics,
+        "tutor_challenge": _tutor_challenge,
+        "tutor_validate": _tutor_validate,
+        "tutor_progress": _tutor_progress,
         "codebase_tree": _codebase_tree,
         "codebase_read": _codebase_read,
         "codebase_search": _codebase_search,
@@ -437,6 +441,40 @@ async def _calendar_create(args: dict) -> dict:
         "summary": event.get("summary"),
         "link": event.get("htmlLink", ""),
     }
+
+
+# ── Code Tutor ──────────────────────────────────────────────────────────────
+
+async def _tutor_topics(args: dict) -> dict:
+    from tools.code_tutor import get_topics
+    return {"topics": get_topics()}
+
+async def _tutor_challenge(args: dict) -> dict:
+    from tools.code_tutor import get_challenge
+    topic = args.get("topic", "python_basics")
+    difficulty = args.get("difficulty", "")
+    challenge_id = args.get("challenge_id", "")
+    challenge = get_challenge(topic, difficulty, challenge_id)
+    if not challenge:
+        return {"error": f"No challenge found for topic: {topic}"}
+    return challenge
+
+async def _tutor_validate(args: dict) -> dict:
+    from tools.code_tutor import validate_solution, save_progress
+    challenge_id = args.get("challenge_id", "")
+    code = args.get("code", "")
+    if not challenge_id or not code:
+        return {"error": "challenge_id and code are required"}
+    result = validate_solution(challenge_id, code)
+    # Save progress
+    topic = challenge_id.split(":")[0] if ":" in challenge_id else ""
+    progress = save_progress(topic, challenge_id, result.get("passed", False))
+    result["progress"] = progress
+    return result
+
+async def _tutor_progress(args: dict) -> dict:
+    from tools.code_tutor import get_progress
+    return get_progress()
 
 
 # ── Codebase Explorer ───────────────────────────────────────────────────────

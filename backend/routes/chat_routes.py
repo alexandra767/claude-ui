@@ -19,8 +19,14 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 OLLAMA_BASE = "http://localhost:11434"
 
-# Location: prefer browser GPS, fall back to IP geolocation
-_location_cache: dict = {}
+# Location: prefer browser GPS, fall back to Ridgway PA (home base)
+_location_cache: dict = {
+    "location": "Ridgway, PA",
+    "timezone": "America/New_York",
+    "lat": 41.4203,
+    "lon": -78.7286,
+    "source": "default",
+}
 
 async def _update_location_from_gps(lat: float, lon: float):
     """Reverse geocode GPS coordinates to city name."""
@@ -278,6 +284,53 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "tutor_topics",
+            "description": "List available coding tutorial topics and challenge counts.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "tutor_challenge",
+            "description": "Get a coding challenge for the user to solve. Returns the problem description, difficulty, and language.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {"type": "string", "description": "Topic ID: python_basics, oop_basics, data_structures, javascript_basics, swift_basics"},
+                    "difficulty": {"type": "string", "enum": ["beginner", "intermediate", "advanced"], "description": "Difficulty level"},
+                    "challenge_id": {"type": "string", "description": "Specific challenge ID (optional)"},
+                },
+                "required": ["topic"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "tutor_validate",
+            "description": "Validate the user's code solution against the challenge's test cases. Runs the code and checks if all tests pass.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "challenge_id": {"type": "string", "description": "The challenge ID to validate against"},
+                    "code": {"type": "string", "description": "The user's complete code solution"},
+                },
+                "required": ["challenge_id", "code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "tutor_progress",
+            "description": "Show the user's coding tutorial progress — completed challenges, total available, and percentage.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "codebase_tree",
             "description": "View the file and directory structure of a local project. Use this to understand a project's layout before reading specific files.",
             "parameters": {
@@ -471,6 +524,10 @@ Available tools:
 - **create_artifact**: Create rich content (code, HTML, SVG, docs) shown in a side panel
 - **generate_image**: Generate images from text descriptions using AI (Gemini)
 - **edit_image**: Edit/modify existing images with AI
+- **tutor_topics**: List coding challenge topics (Python, OOP, Data Structures, JS, Swift)
+- **tutor_challenge**: Get a coding challenge to solve
+- **tutor_validate**: Test the user's code against challenge test cases
+- **tutor_progress**: Show learning progress and completed challenges
 - **codebase_tree**: View the file structure of a local project directory
 - **codebase_read**: Read any file from a local project
 - **codebase_search**: Search for text across all files in a project
