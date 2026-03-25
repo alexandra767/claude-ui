@@ -327,6 +327,12 @@ export default function Chat() {
               <Sparkles className="w-4 h-4 text-accent" />
               <span className="font-medium text-text-primary">{selectedModel}</span>
             </div>
+            {projectId && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-accent/10 text-accent text-xs font-medium">
+                <span className="w-2 h-2 rounded-full bg-accent" />
+                Project mode
+              </div>
+            )}
           </div>
 
           {/* Messages area */}
