@@ -519,6 +519,20 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "security_camera",
+            "description": "View the security camera feed. Captures a live snapshot from a security camera and analyzes it with AI vision to describe what is visible (people, vehicles, animals, packages, etc).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "camera": {"type": "string", "description": "Camera name (default: front_door)", "default": "front_door"},
+                    "question": {"type": "string", "description": "Specific question about what you see (optional)"},
+                },
+            },
+        },
+    },
 ]
 
 SYSTEM_PROMPT_TEMPLATE = """You are a helpful AI assistant with access to powerful tools. Use them whenever they would help answer the user's question.
@@ -558,6 +572,7 @@ When the user asks for a challenge and you've run out of built-in ones, generate
 - **drive_search**: Search Google Drive by content
 - **drive_read_doc**: Read a Google Doc's text content
 - **drive_create_doc**: Create a new Google Doc
+- **security_camera**: View the security camera — captures a live snapshot and describes what it sees (people, vehicles, animals, packages)
 
 Guidelines:
 - Use tools proactively — don't just describe what you could do, actually do it
@@ -885,7 +900,7 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
                         yield f"data: {json.dumps({'type': 'artifact', 'artifact': artifact})}\n\n"
 
                     # If image was generated, send it to the frontend
-                    if tool_name in ("generate_image", "edit_image") and tool_result.get("success") and tool_result.get("filename"):
+                    if tool_name in ("generate_image", "edit_image", "security_camera") and tool_result.get("success") and tool_result.get("filename"):
                         img_data = {"filename": tool_result["filename"], "prompt": tool_result.get("prompt", "")}
                         all_images.append(img_data)
                         yield f"data: {json.dumps({'type': 'image', **img_data})}\n\n"

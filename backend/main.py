@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+import os
+load_dotenv("/home/alexandratitus767/claude-ui/backend/.env")
 import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))

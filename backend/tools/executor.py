@@ -1,3 +1,5 @@
+from dotenv import load_dotenv as _ld
+_ld("/home/alexandratitus767/claude-ui/backend/.env")
 """Central tool executor — routes tool calls to the right handler."""
 import json
 import subprocess
@@ -50,6 +52,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "codebase_read": _codebase_read,
         "codebase_search": _codebase_search,
         "drive_list_files": _drive_list_files,
+        "security_camera": _security_camera,
     }
     handler = handlers.get(name)
     if not handler:
@@ -1104,3 +1107,100 @@ async def _edit_image(args: dict) -> dict:
         return {"success": False, "error": "No image in response"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+# ── Security Camera ────────────────────────────────────────────────────────
+
+async def _security_camera(args: dict) -> dict:
+    """Capture a snapshot from the security camera and analyze it with Gemini vision."""
+    import base64
+    import uuid as _uuid
+
+    camera = args.get("camera", "front_door")
+    question = args.get("question", "")
+
+    # Camera RTSP URLs
+    cameras = {
+        "front_door": {
+            "url": "rtsp://admin:Camera1234@192.168.1.188:554/h264Preview_01_sub",
+            "name": "Front Door",
+        },
+    }
+
+    cam_info = cameras.get(camera, cameras["front_door"])
+    cam_name = cam_info["name"]
+    cam_url = cam_info["url"]
+
+    # Capture frame via ffmpeg (more reliable than cv2 for RTSP)
+    snapshot_dir = os.path.expanduser("~/generated_imgs")
+    os.makedirs(snapshot_dir, exist_ok=True)
+    filename = f"camera_{_uuid.uuid4().hex[:12]}.jpg"
+    snapshot_path = os.path.join(snapshot_dir, filename)
+
+    try:
+        import subprocess as _sp
+        result = _sp.run(
+            [
+                "ffmpeg", "-y",
+                "-rtsp_transport", "tcp",
+                "-i", cam_url,
+                "-frames:v", "1",
+                "-q:v", "2",
+                snapshot_path,
+            ],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode != 0 or not os.path.exists(snapshot_path):
+            return {"error": f"Could not capture from {cam_name} camera. It may be offline."}
+    except Exception as e:
+        return {"error": f"Camera capture failed: {str(e)}"}
+
+    # Read and encode the image
+    with open(snapshot_path, "rb") as f:
+        img_bytes = f.read()
+    frame_b64 = base64.b64encode(img_bytes).decode()
+
+    # Analyze with Gemini vision
+    analysis = ""
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    if api_key:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                vision_prompt = f"You are a home security assistant. Describe what you see in this image from the {cam_name} camera. Be specific about people, vehicles, animals, objects, and activities."
+                if question:
+                    vision_prompt += f" The user specifically asks: {question}"
+
+                resp = await client.post(
+                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+                    params={"key": api_key},
+                    json={
+                        "contents": [{
+                            "parts": [
+                                {"text": vision_prompt},
+                                {"inline_data": {"mime_type": "image/jpeg", "data": frame_b64}},
+                            ]
+                        }]
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for candidate in data.get("candidates", []):
+                        for part in candidate.get("content", {}).get("parts", []):
+                            if "text" in part:
+                                analysis = part["text"]
+                                break
+                        if analysis:
+                            break
+        except Exception as e:
+            analysis = f"Camera captured but vision analysis failed: {str(e)}"
+
+    if not analysis:
+        analysis = "Snapshot captured but could not analyze the image (no vision API available)."
+
+    return {
+        "success": True,
+        "filename": filename,
+        "camera": cam_name,
+        "analysis": analysis,
+        "prompt": f"{cam_name} camera snapshot",
+    }
