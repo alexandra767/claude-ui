@@ -21,61 +21,8 @@ OLLAMA_BASE = "http://localhost:11434"
 
 from location import _get_user_location
 from tools.definitions import TOOLS
-
-
-SYSTEM_PROMPT_TEMPLATE = """You are a helpful AI assistant with access to powerful tools. Use them whenever they would help answer the user's question.
-
-The user is located in {location} (timezone: {timezone}). When they ask about weather, time, or local info, use this location automatically — do not ask them where they are.
-
-Available tools:
-- **execute_code**: Run Python, JavaScript, or Bash code
-- **web_search**: Search the web for current information
-- **fetch_url**: Read a webpage's content
-- **get_datetime**: Get current date and time
-- **get_weather**: Get weather for any location
-- **calculator**: Evaluate math expressions
-- **gmail_search**: Search the user's Gmail (supports Gmail search syntax)
-- **gmail_read**: Read a specific email by ID
-- **gmail_send**: Send or reply to emails
-- **calendar_list**: List upcoming Google Calendar events
-- **calendar_create**: Create calendar events
-- **create_artifact**: Create rich content (code, HTML, SVG, docs) shown in a side panel
-- **generate_image**: Generate images from text descriptions using AI (Gemini)
-- **edit_image**: Edit/modify existing images with AI
-- **tutor_topics**: List coding challenge topics (Python, OOP, Data Structures, JS, Swift)
-- **tutor_challenge**: Get a coding challenge to solve
-- **tutor_validate**: Test the user's code against challenge test cases
-- **tutor_validate_dynamic**: Test code against custom test cases you generate (for unlimited challenges)
-- **tutor_progress**: Show learning progress and completed challenges
-When the user asks for a challenge and you've run out of built-in ones, generate a new challenge yourself with test code and use tutor_validate_dynamic to check their solution.
-- **codebase_tree**: View the file structure of a local project directory
-- **codebase_read**: Read any file from a local project
-- **codebase_search**: Search for text across all files in a project
-- **youtube_transcript**: Get transcript/captions from a YouTube video for summarization
-- **save_note**: Save a new note/memory that persists across conversations
-- **read_note**: Read the full content of a saved note
-- **update_note**: Append to an existing note without losing data
-- **list_notes**: List and search saved notes
-- **drive_list_files**: List recent files in Google Drive
-- **drive_search**: Search Google Drive by content
-- **drive_read_doc**: Read a Google Doc's text content
-- **drive_create_doc**: Create a new Google Doc
-- **security_camera**: View the security camera — captures a live snapshot and describes what it sees (people, vehicles, animals, packages)
-
-Guidelines:
-- Use tools proactively — don't just describe what you could do, actually do it
-- When the user asks "what do you know about X" or "tell me about X" — ALWAYS check list_notes first before searching the web. Your notes contain information from previous conversations.
-- When the user says "remember X" or "save this" — use save_note to persist it
-- When the user says "update my note about X" — use list_notes to find it, then update_note to append
-- For math, use the calculator tool instead of computing in your head
-- For current events, dates, weather — use the appropriate tool
-- For code demonstrations, use execute_code to actually run it and show output
-- For local projects on the Spark, use codebase_tree/codebase_read/codebase_search to explore them
-- Create artifacts for substantial standalone content the user might want to keep
-- For short inline code examples, use regular markdown code blocks
-- Always format responses with clear markdown
-
-Current date/time: {datetime_now}"""
+from tools.system_prompt import build_system_prompt
+from utils import resize_image_for_vision, read_file_content
 
 
 class SendMessageRequest(BaseModel):
@@ -235,35 +182,30 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
     result = await db.execute(select(Message).where(Message.conversation_id == convo.id).order_by(Message.created_at))
     all_msgs = result.scalars().all()
 
-    # System prompt
+    # System prompt — gather DB data, then delegate to build_system_prompt()
     location, tz = await _get_user_location()
-    system = SYSTEM_PROMPT_TEMPLATE.format(
-        location=location,
-        timezone=tz,
-        datetime_now=datetime.now().strftime("%A, %B %d, %Y %I:%M %p"),
-    )
-    # Add persona if specified
-    if req.persona:
-        persona_prompt = _get_persona_prompt(req.persona)
-        if persona_prompt:
-            system += f"\n\nPersona: {persona_prompt}"
 
-    # Add custom instructions from user profile
     user_result = await db.execute(select(User).where(User.id == user_id))
     user_obj = user_result.scalar_one_or_none()
-    if user_obj and user_obj.custom_instructions:
-        system += f"\n\nUser's custom instructions: {user_obj.custom_instructions}"
+    custom_instructions = user_obj.custom_instructions if user_obj else None
 
+    project_system_prompt = None
+    project_name = None
     if req.project_id:
         proj_result = await db.execute(select(Project).where(Project.id == req.project_id))
         project = proj_result.scalar_one_or_none()
         if project:
-            if project.system_prompt:
-                system += f"\n\nProject instructions: {project.system_prompt}"
-            # Auto-load all notes for this project
-            project_notes = _load_project_notes(project.name)
-            if project_notes:
-                system += f"\n\nProject knowledge (from saved notes):\n{project_notes}"
+            project_system_prompt = project.system_prompt
+            project_name = project.name
+
+    system = build_system_prompt(
+        location=location,
+        timezone=tz,
+        persona=req.persona,
+        custom_instructions=custom_instructions,
+        project_system_prompt=project_system_prompt,
+        project_name=project_name,
+    )
 
     ollama_messages = [{"role": "system", "content": system}]
     for m in all_msgs:
@@ -278,12 +220,12 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
                 # Image attachments → resize and send as vision input
                 if mime.startswith("image/") or filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
                     if filepath and os.path.exists(filepath):
-                        img_b64 = _resize_image_for_vision(filepath)
+                        img_b64 = resize_image_for_vision(filepath)
                         if img_b64:
                             msg_images.append(img_b64)
                 else:
                     # Text/PDF attachments → read content
-                    file_text = _read_file_content(filepath, filename)
+                    file_text = read_file_content(filepath, filename)
                     if file_text:
                         msg_content += f"\n\n--- Attached file: {filename} ---\n{file_text}\n--- End of file ---"
         msg_entry = {"role": m.role, "content": msg_content}
@@ -465,113 +407,6 @@ async def tools_status():
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
-
-def _resize_image_for_vision(filepath: str, max_size: int = 1024) -> str:
-    """Resize image and convert to base64 for vision model. Keeps under ~1MB."""
-    import base64
-    from io import BytesIO
-    try:
-        from PIL import Image
-        img = Image.open(filepath)
-        # Convert RGBA to RGB
-        if img.mode in ('RGBA', 'P'):
-            img = img.convert('RGB')
-        # Resize if too large
-        w, h = img.size
-        if w > max_size or h > max_size:
-            ratio = min(max_size / w, max_size / h)
-            img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
-        # Save to buffer as JPEG (smaller than PNG)
-        buf = BytesIO()
-        img.save(buf, format='JPEG', quality=85)
-        return base64.b64encode(buf.getvalue()).decode('utf-8')
-    except Exception:
-        # Fallback: read raw file
-        try:
-            with open(filepath, 'rb') as f:
-                data = f.read()
-            if len(data) > 5 * 1024 * 1024:  # Skip files over 5MB
-                return ""
-            return base64.b64encode(data).decode('utf-8')
-        except Exception:
-            return ""
-
-
-def _get_persona_prompt(persona_id: str) -> str:
-    """Get persona system prompt by ID."""
-    try:
-        personas_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tools", "personas.json")
-        with open(personas_path) as f:
-            personas = json.load(f)
-        for p in personas:
-            if p["id"] == persona_id:
-                return p.get("prompt", "")
-    except Exception:
-        pass
-    return ""
-
-
-def _load_project_notes(project_name: str) -> str:
-    """Load all notes for a project and return as combined text."""
-    notes_dir = os.path.expanduser("~/claude-ui/notes")
-    combined = ""
-
-    # Check project subfolder
-    project_dir = os.path.join(notes_dir, project_name)
-    if os.path.isdir(project_dir):
-        for f in sorted(os.listdir(project_dir)):
-            if f.endswith(".md"):
-                filepath = os.path.join(project_dir, f)
-                with open(filepath, "r") as fh:
-                    content = fh.read()
-                combined += f"\n--- {f} ---\n{content}\n"
-
-    # Also check root notes dir for notes matching project name
-    for f in sorted(os.listdir(notes_dir)):
-        if f.endswith(".md") and project_name.lower() in f.lower():
-            filepath = os.path.join(notes_dir, f)
-            with open(filepath, "r") as fh:
-                content = fh.read()
-            combined += f"\n--- {f} ---\n{content}\n"
-
-    # Truncate if too long (keep under 10k chars to leave room for conversation)
-    if len(combined) > 10000:
-        combined = combined[:10000] + "\n\n...(notes truncated)"
-
-    return combined.strip()
-
-
-def _read_file_content(filepath: str, filename: str) -> str:
-    """Read file content, supporting PDF, text, code, and common formats."""
-    import os
-    if not filepath or not os.path.exists(filepath):
-        return ""
-    try:
-        ext = os.path.splitext(filename.lower())[1]
-        # PDF
-        if ext == ".pdf":
-            import fitz  # PyMuPDF
-            doc = fitz.open(filepath)
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            doc.close()
-            # Truncate very long PDFs
-            if len(text) > 15000:
-                text = text[:15000] + "\n\n...(truncated, showing first ~15000 characters)"
-            return text
-        # Binary files we can't read
-        if ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp3", ".mp4", ".zip", ".tar", ".gz"):
-            return f"[Binary file: {filename}, {os.path.getsize(filepath)} bytes]"
-        # Everything else: try as text
-        with open(filepath, "r", errors="replace") as f:
-            text = f.read()
-        if len(text) > 15000:
-            text = text[:15000] + "\n\n...(truncated)"
-        return text
-    except Exception as e:
-        return f"[Could not read file: {e}]"
-
 
 def _parse_artifacts(text: str) -> list[dict]:
     artifacts = []
