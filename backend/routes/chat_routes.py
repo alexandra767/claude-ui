@@ -692,7 +692,7 @@ async def search_messages(q: str = "", user_id: str = Depends(get_current_user),
             "message_id": msg.id,
             "role": msg.role,
             "snippet": msg.content[:200],
-            "created_at": msg.created_at.isoformat() if msg.created_at else None,
+            "created_at": (msg.created_at.isoformat() + "Z") if msg.created_at else None,
         })
     return results
 
@@ -1115,11 +1115,11 @@ async def _get_convo(convo_id: str, user_id: str, db: AsyncSession) -> Conversat
 
 
 def _convo_dict(c: Conversation) -> dict:
-    return {"id": c.id, "title": c.title, "model": c.model, "project_id": c.project_id, "is_starred": c.is_starred, "created_at": c.created_at.isoformat() if c.created_at else None, "updated_at": c.updated_at.isoformat() if c.updated_at else None}
+    return {"id": c.id, "title": c.title, "model": c.model, "project_id": c.project_id, "is_starred": c.is_starred, "created_at": (c.created_at.isoformat() + "Z") if c.created_at else None, "updated_at": (c.updated_at.isoformat() + "Z") if c.updated_at else None}
 
 
 def _msg_dict(m: Message) -> dict:
-    return {"id": m.id, "role": m.role, "content": m.content, "model": m.model, "artifacts": m.artifacts, "attachments": m.attachments, "images": m.images, "thinking": m.thinking, "tool_calls": m.tool_calls, "tool_results": m.tool_results, "token_count": m.token_count, "created_at": m.created_at.isoformat() if m.created_at else None}
+    return {"id": m.id, "role": m.role, "content": m.content, "model": m.model, "artifacts": m.artifacts, "attachments": m.attachments, "images": m.images, "thinking": m.thinking, "tool_calls": m.tool_calls, "tool_results": m.tool_results, "token_count": m.token_count, "created_at": (m.created_at.isoformat() + "Z") if m.created_at else None}
 
 
 @asynccontextmanager

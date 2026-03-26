@@ -108,8 +108,11 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
   const projectChats = filtered.filter((c) => c.project_id);
   const recent = filtered.filter((c) => !c.is_starred && !c.project_id);
 
-  // Group recent by date
-  const today = new Date();
+  // Group recent by calendar day (local timezone)
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfYesterday = new Date(startOfToday.getTime() - 86400000);
+  const startOfWeek = new Date(startOfToday.getTime() - 6 * 86400000);
   const groups: { label: string; items: Conversation[] }[] = [];
   const todayItems: Conversation[] = [];
   const yesterdayItems: Conversation[] = [];
@@ -118,10 +121,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
 
   recent.forEach((c) => {
     const d = new Date(c.updated_at);
-    const diff = Math.floor((today.getTime() - d.getTime()) / 86400000);
-    if (diff === 0) todayItems.push(c);
-    else if (diff === 1) yesterdayItems.push(c);
-    else if (diff < 7) weekItems.push(c);
+    if (d >= startOfToday) todayItems.push(c);
+    else if (d >= startOfYesterday) yesterdayItems.push(c);
+    else if (d >= startOfWeek) weekItems.push(c);
     else olderItems.push(c);
   });
 

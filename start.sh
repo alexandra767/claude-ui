@@ -18,6 +18,10 @@ echo $! > /tmp/claude-ui-backend.pid
 echo "    Backend PID: $(cat /tmp/claude-ui-backend.pid)"
 
 # Start frontend
+# Load nvm for correct Node version
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && source "$NVM_DIR/nvm.sh"
+nvm use 20 > /dev/null 2>&1
 echo "[*] Starting frontend on port 3000..."
 cd ~/claude-ui/frontend
 nohup npm run dev > /tmp/claude-ui-frontend.log 2>&1 &
