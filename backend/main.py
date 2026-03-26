@@ -83,7 +83,7 @@ async def list_gallery():
 @app.post("/api/location/update")
 async def update_location(data: dict):
     """Receive GPS coordinates from the browser and reverse geocode."""
-    from routes.chat_routes import _update_location_from_gps, _location_cache
+    from location import _update_location_from_gps, _location_cache
     lat = data.get("lat")
     lon = data.get("lon")
     if lat is not None and lon is not None:

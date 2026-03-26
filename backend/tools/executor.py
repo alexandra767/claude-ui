@@ -195,7 +195,7 @@ async def _get_weather(args: dict) -> dict:
         # Fall back to cached GPS location from browser, then default
         if not lat:
             try:
-                from routes.chat_routes import _location_cache
+                from location import _location_cache
                 if _location_cache.get("lat"):
                     lat = _location_cache["lat"]
                     lon = _location_cache["lon"]
