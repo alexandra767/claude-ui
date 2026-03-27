@@ -10,6 +10,8 @@ import ProjectDetail from './pages/ProjectDetail';
 import Share from './pages/Share';
 import Gallery from './pages/Gallery';
 import Toast from './components/Toast';
+import ErrorBoundary from './components/ErrorBoundary';
+import ConnectionStatus from './components/ConnectionStatus';
 import { useTheme } from './hooks/useTheme';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -35,6 +37,7 @@ export default function App() {
 
   return (
     <>
+      <ErrorBoundary>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
@@ -47,7 +50,11 @@ export default function App() {
         <Route path="/gallery" element={<ProtectedRoute><Gallery /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </ErrorBoundary>
       <Toast />
+      <div className="fixed top-2 right-2 z-50">
+        <ConnectionStatus />
+      </div>
     </>
   );
 }
