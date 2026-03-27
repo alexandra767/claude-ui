@@ -13,6 +13,7 @@ from database import init_db
 
 from routes.auth_routes import router as auth_router
 from routes.chat_routes import router as chat_router
+from routes.chat_crud import router as chat_crud_router
 from routes.project_routes import router as project_router
 from routes.tool_routes import router as tool_router
 from routes.file_routes import router as file_router
@@ -40,6 +41,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(chat_router)
+app.include_router(chat_crud_router)
 app.include_router(project_router)
 app.include_router(tool_router)
 app.include_router(file_router)
