@@ -162,7 +162,13 @@ export default function Chat() {
       let ollamaEvalDuration = 0;
 
       while (true) {
-        const { done, value } = await reader.read();
+        const readResult = await Promise.race([
+          reader.read(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Stream timeout — no data received for 60 seconds")), 60000)
+          ),
+        ]);
+        const { done, value } = readResult;
         if (done) break;
 
         const chunk = decoder.decode(value, { stream: true });
@@ -254,12 +260,23 @@ export default function Chat() {
       }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
-        addMessage({
-          id: 'err-' + Date.now(),
-          role: 'assistant',
-          content: `Something went wrong: ${err.message}. Make sure the model is running in Ollama.`,
-          created_at: new Date().toISOString(),
-        });
+        // Preserve any partial streaming content
+        const partial = useChatStore.getState().streamingContent;
+        if (partial) {
+          addMessage({
+            id: 'msg-' + Date.now(),
+            role: 'assistant',
+            content: partial + '\n\n---\n*Connection lost — response may be incomplete. Use the regenerate button (↻) to retry.*',
+            created_at: new Date().toISOString(),
+          });
+        } else {
+          addMessage({
+            id: 'err-' + Date.now(),
+            role: 'assistant',
+            content: `Connection lost: ${err.message}. Use the regenerate button (↻) to retry, or check that Ollama is running.`,
+            created_at: new Date().toISOString(),
+          });
+        }
       }
     } finally {
       setStreaming(false);
