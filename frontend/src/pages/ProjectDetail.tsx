@@ -4,7 +4,7 @@ import { projects as projectsApi } from '../api/client';
 import { useChatStore } from '../stores/chatStore';
 import {
   ArrowLeft, Settings, MessageSquare, Plus, Upload, FileText,
-  Trash2, Save, Check, X
+  Trash2, Save, Check
 } from 'lucide-react';
 import type { Project } from '../types';
 

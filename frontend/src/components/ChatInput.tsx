@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Paperclip, X, Globe, Code, FileText } from 'lucide-react';
+import { ArrowUp, Paperclip, X, Code, FileText } from 'lucide-react';
 import { useChatStore } from '../stores/chatStore';
 import { files } from '../api/client';
 import type { Attachment } from '../types';

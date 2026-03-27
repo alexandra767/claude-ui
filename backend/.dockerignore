@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+claude_ui.db
+.env
+tools/*_token.json
+tools/google_credentials.json
+uploads/

@@ -5,7 +5,7 @@ import { useChatStore } from '../stores/chatStore';
 import { auth } from '../api/client';
 import { applyTheme } from '../hooks/useTheme';
 import {
-  ArrowLeft, User, Palette, Shield, Database, Bell,
+  ArrowLeft, User, Palette, Shield, Database,
   Monitor, Sun, Moon, Save, Check, Trash2
 } from 'lucide-react';
 

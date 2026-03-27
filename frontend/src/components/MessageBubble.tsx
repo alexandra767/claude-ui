@@ -6,7 +6,7 @@ import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
 import { Copy, Check, User, Sparkles, ChevronRight, ChevronDown, Download, Maximize2, Brain, Pencil, RefreshCw, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useState } from 'react';
-import type { Message, Artifact } from '../types';
+import type { Message } from '../types';
 import { useToastStore } from '../stores/toastStore';
 
 interface Props {

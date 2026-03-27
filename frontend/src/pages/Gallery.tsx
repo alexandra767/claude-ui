@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, Maximize2, Trash2 } from 'lucide-react';
+import { ArrowLeft, Download, Maximize2 } from 'lucide-react';
 
 interface ImageFile {
   name: string;

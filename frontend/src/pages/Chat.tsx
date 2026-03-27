@@ -52,7 +52,6 @@ export default function Chat() {
   const [activeTools, setActiveTools] = useState<ActiveTool[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [pendingAttachments, setPendingAttachments] = useState<any[]>([]);
   const [thinkingContent, setThinkingContent] = useState('');
   const streamStartRef = useRef<number>(0);
   const tokenCountRef = useRef<number>(0);
@@ -374,8 +373,7 @@ export default function Chat() {
               const { files: fileApi } = await import('../api/client');
               for (const file of Array.from(e.dataTransfer.files)) {
                 try {
-                  const result = await fileApi.upload(file);
-                  setPendingAttachments(prev => [...prev, result]);
+                  await fileApi.upload(file);
                 } catch {
                   useToastStore.getState().addToast('Failed to upload file', 'error');
                 }
