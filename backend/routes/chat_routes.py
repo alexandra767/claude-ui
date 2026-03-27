@@ -119,6 +119,7 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
         all_thinking = ""
         messages = list(ollama_messages)
         max_tool_rounds = 8  # Safety limit
+        partial_msg_id = None  # Track partial message for incremental saves
 
         try:
             for round_num in range(max_tool_rounds + 1):
@@ -128,7 +129,7 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
                 eval_count = 0
                 eval_duration = 0
 
-                async with httpx.AsyncClient(timeout=300.0) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)) as client:
                     payload = {
                         "model": req.model,
                         "messages": messages,
@@ -157,6 +158,23 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
                                         response_text += chunk
                                         full_response += chunk
                                         yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
+
+                                        # Save partial content after first token
+                                        if not partial_msg_id and full_response:
+                                            try:
+                                                async with get_db_session() as partial_db:
+                                                    partial_msg = Message(
+                                                        conversation_id=convo.id,
+                                                        role="assistant",
+                                                        content=full_response,
+                                                        model=req.model,
+                                                    )
+                                                    partial_db.add(partial_msg)
+                                                    await partial_db.commit()
+                                                    await partial_db.refresh(partial_msg)
+                                                    partial_msg_id = partial_msg.id
+                                            except Exception:
+                                                pass  # Non-critical, final save is the fallback
 
                                     # Collect tool calls
                                     if msg.get("tool_calls"):
@@ -218,6 +236,26 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
                         "content": json.dumps(tool_result),
                     })
 
+                # Update partial save after tool round
+                if partial_msg_id:
+                    try:
+                        async with get_db_session() as partial_db:
+                            stmt = select(Message).where(Message.id == partial_msg_id)
+                            result = await partial_db.execute(stmt)
+                            msg = result.scalar_one_or_none()
+                            if msg:
+                                msg.content = full_response
+                                msg.tool_calls = all_tool_calls if all_tool_calls else None
+                                msg.artifacts = all_artifacts if all_artifacts else None
+                                msg.images = all_images if all_images else None
+                                msg.thinking = all_thinking if all_thinking else None
+                                await partial_db.commit()
+                    except Exception:
+                        pass
+
+                # Heartbeat keeps HTTP connection alive during long tool executions
+                yield ": heartbeat\n\n"
+
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
 
@@ -229,20 +267,29 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
         if inline_artifacts:
             yield f"data: {json.dumps({'type': 'artifacts', 'artifacts': inline_artifacts})}\n\n"
 
-        # Save assistant message
+        # Save assistant message (update partial or insert new)
         try:
             async with get_db_session() as save_db:
-                assistant_msg = Message(
-                    conversation_id=convo.id,
-                    role="assistant",
-                    content=full_response,
-                    model=req.model,
-                    artifacts=all_artifacts if all_artifacts else None,
-                    tool_calls=all_tool_calls if all_tool_calls else None,
-                    images=all_images if all_images else None,
-                    thinking=all_thinking if all_thinking else None,
-                )
-                save_db.add(assistant_msg)
+                if partial_msg_id:
+                    # Update the partial message with final content
+                    stmt = select(Message).where(Message.id == partial_msg_id)
+                    result = await save_db.execute(stmt)
+                    assistant_msg = result.scalar_one_or_none()
+                    if assistant_msg:
+                        assistant_msg.content = full_response
+                        assistant_msg.model = req.model
+                        assistant_msg.artifacts = all_artifacts if all_artifacts else None
+                        assistant_msg.tool_calls = all_tool_calls if all_tool_calls else None
+                        assistant_msg.images = all_images if all_images else None
+                        assistant_msg.thinking = all_thinking if all_thinking else None
+                    else:
+                        # Fallback: partial was somehow lost
+                        assistant_msg = Message(conversation_id=convo.id, role="assistant", content=full_response, model=req.model, artifacts=all_artifacts if all_artifacts else None, tool_calls=all_tool_calls if all_tool_calls else None, images=all_images if all_images else None, thinking=all_thinking if all_thinking else None)
+                        save_db.add(assistant_msg)
+                else:
+                    # No partial exists (e.g., empty response)
+                    assistant_msg = Message(conversation_id=convo.id, role="assistant", content=full_response, model=req.model, artifacts=all_artifacts if all_artifacts else None, tool_calls=all_tool_calls if all_tool_calls else None, images=all_images if all_images else None, thinking=all_thinking if all_thinking else None)
+                    save_db.add(assistant_msg)
 
                 if len(all_msgs) <= 1:
                     title = _generate_title(req.message)
