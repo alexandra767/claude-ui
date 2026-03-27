@@ -8,6 +8,7 @@ import {
   Settings, FolderOpen, LogOut, ChevronDown, Sparkles, Send, Download, Image
 } from 'lucide-react';
 import type { Conversation } from '../types';
+import { useToastStore } from '../stores/toastStore';
 
 export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const navigate = useNavigate();
@@ -28,7 +29,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
     try {
       const convos = await chat.listConversations();
       setConversations(convos);
-    } catch {}
+    } catch {
+      useToastStore.getState().addToast('Failed to load conversations', 'error');
+    }
   };
 
   const startNewChat = () => {
@@ -45,7 +48,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
     try {
       const full = await chat.getConversation(convo.id);
       setMessages(full.messages || []);
-    } catch {}
+    } catch {
+      useToastStore.getState().addToast('Failed to load conversation', 'error');
+    }
   };
 
   const deleteConversation = async (id: string, e: React.MouseEvent) => {
@@ -53,7 +58,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
     try {
       await chat.deleteConversation(id);
       removeConversation(id);
-    } catch {}
+    } catch {
+      useToastStore.getState().addToast('Failed to delete conversation', 'error');
+    }
   };
 
   const toggleStar = async (convo: Conversation, e: React.MouseEvent) => {
@@ -61,7 +68,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
     try {
       await chat.updateConversation(convo.id, { is_starred: !convo.is_starred });
       updateConversation(convo.id, { is_starred: !convo.is_starred });
-    } catch {}
+    } catch {
+      useToastStore.getState().addToast('Failed to update conversation', 'warning');
+    }
   };
 
   const exportConversation = (id: string, e: React.MouseEvent) => {
@@ -80,7 +89,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (res.ok) setSearchResults(await res.json());
-      } catch {}
+      } catch {
+        useToastStore.getState().addToast('Search failed', 'warning');
+      }
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
@@ -96,7 +107,9 @@ export default function Sidebar({ isOpen, onClose }: { isOpen: boolean; onClose:
       try {
         await chat.updateConversation(id, { title: editTitle.trim() });
         updateConversation(id, { title: editTitle.trim() });
-      } catch {}
+      } catch {
+        useToastStore.getState().addToast('Failed to rename conversation', 'error');
+      }
     }
     setEditingId(null);
   };

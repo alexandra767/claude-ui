@@ -3,6 +3,7 @@ import { ArrowUp, Paperclip, X, Globe, Code, FileText } from 'lucide-react';
 import { useChatStore } from '../stores/chatStore';
 import { files } from '../api/client';
 import type { Attachment } from '../types';
+import { useToastStore } from '../stores/toastStore';
 
 interface Props {
   onSend: (message: string, attachments?: Attachment[]) => void;
@@ -55,7 +56,9 @@ export default function ChatInput({ onSend, disabled }: Props) {
         const result = await files.upload(file);
         setAttachments((prev) => [...prev, result]);
       }
-    } catch {}
+    } catch {
+      useToastStore.getState().addToast('Failed to upload file', 'error');
+    }
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -72,7 +75,9 @@ export default function ChatInput({ onSend, disabled }: Props) {
         try {
           const result = await files.upload(file);
           setAttachments((prev) => [...prev, result]);
-        } catch {}
+        } catch {
+          useToastStore.getState().addToast('Failed to paste image', 'error');
+        }
         setUploading(false);
         return;
       }
@@ -211,7 +216,9 @@ function ModelBadge() {
       const { chat: chatApi } = await import('../api/client');
       const data = await chatApi.getModels();
       setModels(data.models);
-    } catch {}
+    } catch {
+      useToastStore.getState().addToast('Failed to load models', 'warning');
+    }
   };
 
   return (

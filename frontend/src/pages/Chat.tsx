@@ -8,6 +8,7 @@ import MessageBubble from '../components/MessageBubble';
 import ArtifactPanel from '../components/ArtifactPanel';
 import { Menu, Sparkles, Zap, Terminal, Search, Globe, Mail, Calendar, Calculator, Clock, FileCode, Image as ImageIcon, Square, ChevronDown, ChevronRight, Brain } from 'lucide-react';
 import type { Message, Attachment } from '../types';
+import { useToastStore } from '../stores/toastStore';
 
 interface StreamStats {
   tokens: number;
@@ -71,6 +72,7 @@ export default function Chat() {
       chatApi.getConversation(conversationId).then((data) => {
         setMessages(data.messages || []);
       }).catch(() => {
+        useToastStore.getState().addToast('Failed to load conversation', 'error');
         navigate('/chat');
       });
     } else if (!conversationId) {
@@ -246,7 +248,9 @@ export default function Chat() {
         setActiveConversation(newConvoId);
         navigate(`/chat/${newConvoId}`, { replace: true });
         // Refresh sidebar
-        chatApi.listConversations().then(setConversations).catch(() => {});
+        chatApi.listConversations().then(setConversations).catch(() => {
+          useToastStore.getState().addToast('Failed to refresh conversations', 'warning');
+        });
       }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
@@ -285,7 +289,9 @@ export default function Chat() {
       // Put the old message text into the input (user can edit it)
       const input = document.querySelector<HTMLTextAreaElement>('textarea');
       if (input) { input.value = msg.content; input.focus(); input.dispatchEvent(new Event('input', { bubbles: true })); }
-    } catch {}
+    } catch {
+      useToastStore.getState().addToast('Failed to edit message', 'error');
+    }
   };
 
   const handleRegenerate = async (msg: Message) => {
@@ -306,7 +312,9 @@ export default function Chat() {
       setMessages(data.messages || []);
       // Re-send the user's message
       handleSend(userMsg.content, userMsg.attachments);
-    } catch {}
+    } catch {
+      useToastStore.getState().addToast('Failed to regenerate response', 'error');
+    }
   };
 
   const isEmpty = messages.length === 0 && !isStreaming;
@@ -351,7 +359,9 @@ export default function Chat() {
                 try {
                   const result = await fileApi.upload(file);
                   setPendingAttachments(prev => [...prev, result]);
-                } catch {}
+                } catch {
+                  useToastStore.getState().addToast('Failed to upload file', 'error');
+                }
               }
             }}
           >
