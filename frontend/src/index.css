@@ -122,3 +122,9 @@ html.dark .markdown-content tr:nth-child(even) { background: rgba(255,255,255,0.
   .markdown-content pre { font-size: 0.8rem; }
   .markdown-content { font-size: 0.95rem; }
 }
+
+/* Toast slide-in animation */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(1rem); }
+  to { opacity: 1; transform: translateX(0); }
+}
