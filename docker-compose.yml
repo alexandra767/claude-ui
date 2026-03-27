@@ -1,0 +1,59 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    volumes:
+      # Database (persist across rebuilds)
+      - ./backend/claude_ui.db:/app/claude_ui.db
+      # Google OAuth tokens
+      - ./backend/tools/google_credentials.json:/app/tools/google_credentials.json:ro
+      - ./backend/tools/google_credentials_drive.json:/app/tools/google_credentials_drive.json:ro
+      - ./backend/tools/gmail_token.json:/app/tools/gmail_token.json
+      - ./backend/tools/google_token.json:/app/tools/google_token.json
+      - ./backend/tools/calendar_token.json:/app/tools/calendar_token.json
+      - ./backend/tools/drive_token.json:/app/tools/drive_token.json
+      # Personas config
+      - ./backend/tools/personas.json:/app/tools/personas.json:ro
+      # Notes directory
+      - ./notes:/app/notes
+      # Uploads
+      - ./backend/uploads:/app/uploads
+      # Generated images (shared with host)
+      - ${HOME}/generated_imgs:/root/generated_imgs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
