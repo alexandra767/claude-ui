@@ -164,7 +164,7 @@ export default function Chat() {
         const readResult = await Promise.race([
           reader.read(),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Stream timeout — no data received for 60 seconds")), 60000)
+            setTimeout(() => reject(new Error("Stream timeout — no data received for 180 seconds. Use the regenerate button (↻) to retry, or check that Ollama is running.")), 180000)
           ),
         ]);
         const { done, value } = readResult;

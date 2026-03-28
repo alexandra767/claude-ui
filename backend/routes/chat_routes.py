@@ -129,12 +129,12 @@ async def send_message(req: SendMessageRequest, user_id: str = Depends(get_curre
                 eval_count = 0
                 eval_duration = 0
 
-                async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=300.0, write=10.0, pool=10.0)) as client:
                     payload = {
                         "model": req.model,
                         "messages": messages,
                         "stream": True,
-                        "options": {"num_ctx": 32768},
+                        "options": {"num_ctx": 32768, "num_predict": 4096},
                         "tools": TOOLS,
                     }
                     async with client.stream("POST", f"{OLLAMA_BASE}/api/chat", json=payload) as response:
